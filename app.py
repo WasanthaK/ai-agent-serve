@@ -5,6 +5,8 @@ import psycopg
 
 from typing import Optional
 
+from db import save_request
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 from openai import OpenAI
@@ -22,56 +24,6 @@ class QuoteWebhookRequest(BaseModel):
     source: str
     customer_name: Optional[str] = None
     message: str
-
-def save_request(source, customer_name, message, result):
-    request_id = uuid.uuid4()
-
-    with psycopg.connect(
-    	host=os.getenv("POSTGRES_HOST"),
-    	port=os.getenv("POSTGRES_PORT"),
-    	dbname=os.getenv("POSTGRES_DB"),
-    	user=os.getenv("POSTGRES_USER"),
-    	password=os.getenv("POSTGRES_PASSWORD")
-    ) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO agent_requests (
-                    id,
-                    source,
-                    customer_name,
-                    message,
-                    intent,
-                    category,
-                    summary,
-                    urgency,
-                    next_action,
-                    needs_human_review,
-                    status
-                )
-                VALUES (
-                    %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s
-                )
-                """,
-                (
-                    request_id,
-                    source,
-                    customer_name,
-                    message,
-                    result["intent"],
-                    result["category"],
-                    result["summary"],
-                    result["urgency"],
-                    result["next_action"],
-                    result["needs_human_review"],
-                    "awaiting_human_review"
-                    if result["needs_human_review"]
-                    else "ready"
-                )
-            )
-
-    return request_id
 
 @app.get("/")
 def health():
