@@ -1,5 +1,14 @@
 import json
 import os
+
+from db import (
+    get_request,
+    get_request_events,
+    record_event,
+    save_request,
+    update_request_status,
+)
+from tools import ToolExecutionError, execute_tool
 from typing import Optional
 from uuid import UUID
 
@@ -280,3 +289,82 @@ def reject_request(
     )
 
     return updated
+
+@app.post("/requests/{request_id}/tools/{tool_name}")
+def run_request_tool(
+    request_id: UUID,
+    tool_name: str,
+):
+    request = get_request(request_id)
+
+    if request is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Request not found",
+        )
+
+    allowed_tools_by_status = {
+        "needs_information": {
+            "prepare_customer_follow_up",
+        },
+    }
+
+    allowed_tools = allowed_tools_by_status.get(
+        request["status"],
+        set(),
+    )
+
+    if tool_name not in allowed_tools:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Tool '{tool_name}' is not allowed when the "
+                f"request status is '{request['status']}'."
+            ),
+        )
+
+    record_event(
+        request_id=request_id,
+        event_type="tool_started",
+        actor="agent",
+        details={
+            "tool": tool_name,
+        },
+    )
+
+    try:
+        result = execute_tool(
+            tool_name=tool_name,
+            request=request,
+        )
+    except ToolExecutionError as exc:
+        record_event(
+            request_id=request_id,
+            event_type="tool_failed",
+            actor="agent",
+            details={
+                "tool": tool_name,
+                "error": str(exc),
+            },
+        )
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
+    record_event(
+        request_id=request_id,
+        event_type="tool_completed",
+        actor="agent",
+        details={
+            "tool": tool_name,
+            "result": result,
+        },
+    )
+
+    return {
+        "request_id": request_id,
+        "status": request["status"],
+        "result": result,
+    }
