@@ -1,14 +1,5 @@
 import json
 import os
-
-from db import (
-    get_request,
-    get_request_events,
-    record_event,
-    save_request,
-    update_request_status,
-)
-from tools import ToolExecutionError, execute_tool
 from typing import Optional
 from uuid import UUID
 
@@ -19,14 +10,19 @@ from pydantic import BaseModel, Field
 from db import (
     get_request,
     get_request_events,
+    get_request_messages,
+    record_event,
+    save_message,
     save_request,
+    update_request_analysis,
     update_request_status,
 )
+from tools import ToolExecutionError, execute_tool
 
 
 app = FastAPI(
     title="Mac Mini Agent Server",
-    version="3.0.0",
+    version="3.1.0",
 )
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -43,43 +39,62 @@ class QuoteWebhookRequest(BaseModel):
 
 
 class WorkflowDecision(BaseModel):
-    actor: str = Field(default="human", min_length=1, max_length=100)
-    reason: Optional[str] = Field(default=None, max_length=1000)
+    actor: str = Field(
+        default="human",
+        min_length=1,
+        max_length=100,
+    )
+    reason: Optional[str] = Field(
+        default=None,
+        max_length=1000,
+    )
+
+
+class CustomerReply(BaseModel):
+    message: str = Field(
+        min_length=1,
+        max_length=5000,
+    )
+    channel: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+    )
 
 
 QUOTE_ANALYSIS_SCHEMA = {
     "type": "object",
     "properties": {
         "intent": {
-            "type": "string"
+            "type": "string",
         },
         "category": {
-            "type": "string"
+            "type": "string",
         },
         "summary": {
-            "type": "string"
+            "type": "string",
         },
         "urgency": {
-            "type": "string"
+            "type": "string",
         },
         "next_action": {
-            "type": "string"
+            "type": "string",
         },
         "needs_human_review": {
-            "type": "boolean"
+            "type": "boolean",
         },
         "missing_information": {
             "type": "array",
             "items": {
-                "type": "string"
-            }
+                "type": "string",
+            },
         },
         "follow_up_questions": {
             "type": "array",
             "items": {
-                "type": "string"
-            }
-        }
+                "type": "string",
+            },
+        },
     },
     "required": [
         "intent",
@@ -89,9 +104,9 @@ QUOTE_ANALYSIS_SCHEMA = {
         "next_action",
         "needs_human_review",
         "missing_information",
-        "follow_up_questions"
+        "follow_up_questions",
     ],
-    "additionalProperties": False
+    "additionalProperties": False,
 }
 
 
@@ -118,8 +133,14 @@ question. If no essential information is missing, return empty arrays
 for missing_information and follow_up_questions.
 
 Set needs_human_review to true for requests that are urgent, dangerous,
-ambiguous, high-value, legally sensitive, or unusual. Otherwise set it
-to false.
+high-value, legally sensitive, or unusual. Do not mark an ordinary
+request for human review merely because information is missing; use
+missing_information and follow_up_questions for that situation.
+
+The input may contain the original request followed by later customer
+replies. Analyse the complete conversation. Treat information supplied
+in later replies as answering earlier missing-information questions.
+Do not ask again for information the customer has already provided.
 
 Do not claim that an appointment, price, availability, or service has
 been confirmed.
@@ -127,7 +148,8 @@ been confirmed.
         input=f"""
 Source: {source}
 Customer: {customer_name or "Unknown"}
-Message: {message}
+Message or conversation:
+{message}
 """,
         text={
             "format": {
@@ -147,7 +169,7 @@ def health():
     return {
         "status": "running",
         "service": "agent-server",
-        "version": "3.0.0",
+        "version": "3.1.0",
     }
 
 
@@ -211,6 +233,104 @@ def retrieve_request_events(request_id: UUID):
     return {
         "request_id": request_id,
         "events": get_request_events(request_id),
+    }
+
+
+@app.get("/requests/{request_id}/messages")
+def retrieve_request_messages(request_id: UUID):
+    request = get_request(request_id)
+
+    if request is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Request not found",
+        )
+
+    return {
+        "request_id": request_id,
+        "original_message": request["message"],
+        "messages": get_request_messages(request_id),
+    }
+
+
+@app.post("/requests/{request_id}/reply")
+def receive_customer_reply(
+    request_id: UUID,
+    reply: CustomerReply,
+):
+    request = get_request(request_id)
+
+    if request is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Request not found",
+        )
+
+    if request["status"] != "needs_information":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Customer replies can only be added while information "
+                f"is required. Current status: {request['status']}"
+            ),
+        )
+
+    channel = reply.channel or request["source"]
+
+    saved_message = save_message(
+        request_id=request_id,
+        role="customer",
+        channel=channel,
+        message=reply.message,
+    )
+
+    messages = get_request_messages(request_id)
+
+    conversation_lines = [
+        f"Original customer request: {request['message']}"
+    ]
+
+    for message in messages:
+        conversation_lines.append(
+            f"{message['role'].title()} reply: {message['message']}"
+        )
+
+    conversation = "\n".join(conversation_lines)
+
+    try:
+        result = analyze_quote_request(
+            message=conversation,
+            source=request["source"],
+            customer_name=request["customer_name"],
+        )
+    except Exception as exc:
+        record_event(
+            request_id=request_id,
+            event_type="reanalysis_failed",
+            actor="agent",
+            details={
+                "error_type": type(exc).__name__,
+            },
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "The reply was saved, but the request could not "
+                "be reanalysed."
+            ),
+        ) from exc
+
+    updated_request = update_request_analysis(
+        request_id=request_id,
+        result=result,
+    )
+
+    return {
+        "request_id": request_id,
+        "message": saved_message,
+        "workflow_status": updated_request["status"],
+        "analysis": result,
     }
 
 
@@ -289,6 +409,7 @@ def reject_request(
     )
 
     return updated
+
 
 @app.post("/requests/{request_id}/tools/{tool_name}")
 def run_request_tool(

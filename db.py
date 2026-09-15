@@ -245,3 +245,154 @@ def update_request_status(
             )
 
             return updated_request
+def save_message(
+    request_id,
+    role,
+    channel,
+    message,
+    metadata=None,
+):
+    message_id = uuid.uuid4()
+
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                INSERT INTO agent_messages (
+                    id,
+                    request_id,
+                    role,
+                    channel,
+                    message,
+                    metadata
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING *
+                """,
+                (
+                    message_id,
+                    request_id,
+                    role,
+                    channel,
+                    message,
+                    Jsonb(metadata or {}),
+                ),
+            )
+
+            saved_message = cur.fetchone()
+
+            _record_event(
+                cur,
+                request_id=request_id,
+                event_type=f"{role}_message_received",
+                actor=role,
+                details={
+                    "message_id": str(message_id),
+                    "channel": channel,
+                },
+            )
+
+            return saved_message
+
+
+def get_request_messages(request_id):
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    request_id,
+                    role,
+                    channel,
+                    message,
+                    metadata,
+                    created_at
+                FROM agent_messages
+                WHERE request_id = %s
+                ORDER BY created_at ASC
+                """,
+                (request_id,),
+            )
+
+            return cur.fetchall()
+
+
+def update_request_analysis(
+    request_id,
+    result,
+    actor="agent",
+):
+    missing_information = result.get("missing_information", [])
+    follow_up_questions = result.get("follow_up_questions", [])
+
+    if missing_information:
+        new_status = "needs_information"
+    elif result["needs_human_review"]:
+        new_status = "awaiting_human_review"
+    else:
+        new_status = "ready"
+
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT id, status
+                FROM agent_requests
+                WHERE id = %s
+                FOR UPDATE
+                """,
+                (request_id,),
+            )
+
+            existing = cur.fetchone()
+
+            if existing is None:
+                return None
+
+            cur.execute(
+                """
+                UPDATE agent_requests
+                SET intent = %s,
+                    category = %s,
+                    summary = %s,
+                    urgency = %s,
+                    next_action = %s,
+                    needs_human_review = %s,
+                    missing_information = %s,
+                    follow_up_questions = %s,
+                    status = %s,
+                    updated_at = NOW()
+                WHERE id = %s
+                RETURNING *
+                """,
+                (
+                    result["intent"],
+                    result["category"],
+                    result["summary"],
+                    result["urgency"],
+                    result["next_action"],
+                    result["needs_human_review"],
+                    Jsonb(missing_information),
+                    Jsonb(follow_up_questions),
+                    new_status,
+                    request_id,
+                ),
+            )
+
+            updated_request = cur.fetchone()
+
+            _record_event(
+                cur,
+                request_id=request_id,
+                event_type="request_reanalysed",
+                actor=actor,
+                details={
+                    "previous_status": existing["status"],
+                    "new_status": new_status,
+                    "needs_human_review": result["needs_human_review"],
+                    "missing_information": missing_information,
+                },
+            )
+
+            return updated_request
