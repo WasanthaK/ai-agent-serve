@@ -6,7 +6,6 @@ The project is evolving into a controlled agent platform for service-delivery re
 
 The platform should help service organisations capture requests from multiple channels, collect missing information, identify risk, route work, prepare and evaluate quotations, coordinate delivery and preserve a complete operational history.
 
-This repository contains the open technical implementation and developer documentation. Commercial strategy and pricing are intentionally maintained outside the public repository.
 
 ## Design principles
 
