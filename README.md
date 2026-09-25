@@ -292,3 +292,25 @@ The controlled tool layer can later support:
 - A separate GPU workstation for local inference
 
 Every future tool should remain registered, state-aware, auditable and restricted according to its risk.
+
+## Phase 3 smoke test
+
+Run the end-to-end workflow test while the containers are running:
+
+```bash
+python3 tests/smoke_phase3.py
+```
+
+The test verifies:
+
+- Service health and API version
+- Missing-information detection
+- Controlled follow-up drafting
+- Customer replies and conversational reanalysis
+- Persistent messages
+- Workflow audit events
+- Safety escalation
+- Human approval
+- Invalid state-transition protection
+
+The smoke test creates test records in PostgreSQL and makes live model calls.
