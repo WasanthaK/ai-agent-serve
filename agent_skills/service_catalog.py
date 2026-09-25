@@ -85,6 +85,7 @@ class ServiceCatalog:
 
 
 GROUPS = (
+    ServiceGroup("trades", "Trades", 1),
     ServiceGroup("home-services", "Home Services", 2),
     ServiceGroup("professional-services", "Professional Services", 3),
     ServiceGroup("automotive-root", "Automotive", 4),
@@ -102,21 +103,19 @@ def profile(slug, label, group, order, topics=COMMON, escalation=()):
 
 
 SERVICES = (
-    # No parent is assigned to these 13 services because the supplied
-    # taxonomy did not include the trades-group slug.
-    profile("plumbing", "Plumbing", None, 1, ("issue or work required", "property location", "affected fixture", "when it started"), ("gas smell", "flooding", "sewage exposure")),
-    profile("electrical", "Electrical", None, 2, ("issue or work required", "property location", "affected circuit or equipment", "power availability"), ("electric shock", "sparks or fire", "exposed live wiring")),
-    profile("building", "Building & Construction", None, 3, ("project scope", "site location", "property type", "plans or approvals", "desired timing"), ("structural instability", "collapse risk", "regulated or high-value work")),
-    profile("painting", "Painting", None, 4, ("areas and surfaces", "site location", "interior or exterior", "approximate size", "desired timing"), ("lead or asbestos concern", "unsafe access at height")),
-    profile("roofing", "Roofing", None, 5, ("roof issue or work", "site location", "roof type", "damage extent", "access constraints"), ("major leak", "storm damage", "collapse risk", "unsafe work at height")),
-    profile("renovation", "Renovation & Remodeling", None, 6, ("areas involved", "site location", "scope and goals", "plans or approvals", "target timing"), ("structural changes", "hazardous materials", "high-value work")),
-    profile("hvac", "HVAC & Air Conditioning", None, 7, ("system type", "fault or requested work", "site location", "current behaviour", "preferred timing"), ("burning smell", "electrical hazard", "refrigerant concern")),
-    profile("flooring", "Flooring", None, 8, ("flooring type", "install or repair", "site location", "approximate area", "subfloor condition")),
-    profile("security", "Security & CCTV", None, 9, ("system type", "install or fault", "site location", "coverage required", "existing equipment"), ("active break-in", "personal safety threat", "privacy concern")),
-    profile("carpentry", "Carpentry & Woodwork", None, 10, ("item or structure", "repair or new work", "site location", "materials or dimensions", "desired timing"), ("structural failure", "unsafe stairs or barriers")),
-    profile("fencing", "Fencing & Gates", None, 11, ("fence or gate type", "repair or installation", "site location", "approximate length", "automation needs"), ("electrical gate hazard", "pool-safety barrier")),
-    profile("tiling", "Tiling", None, 12, ("area to tile", "site location", "installation or repair", "approximate area", "tile availability"), ("water damage", "hazardous materials")),
-    profile("welding", "Welding & Metal Works", None, 13, ("item or structure", "material", "repair or fabrication", "site location", "dimensions or drawings"), ("load-bearing failure", "fuel or gas container", "hot-work hazard")),
+    profile("plumbing", "Plumbing", "trades", 1, ("issue or work required", "property location", "affected fixture", "when it started"), ("gas smell", "flooding", "sewage exposure")),
+    profile("electrical", "Electrical", "trades", 2, ("issue or work required", "property location", "affected circuit or equipment", "power availability"), ("electric shock", "sparks or fire", "exposed live wiring")),
+    profile("building", "Building & Construction", "trades", 3, ("project scope", "site location", "property type", "plans or approvals", "desired timing"), ("structural instability", "collapse risk", "regulated or high-value work")),
+    profile("painting", "Painting", "trades", 4, ("areas and surfaces", "site location", "interior or exterior", "approximate size", "desired timing"), ("lead or asbestos concern", "unsafe access at height")),
+    profile("roofing", "Roofing", "trades", 5, ("roof issue or work", "site location", "roof type", "damage extent", "access constraints"), ("major leak", "storm damage", "collapse risk", "unsafe work at height")),
+    profile("renovation", "Renovation & Remodeling", "trades", 6, ("areas involved", "site location", "scope and goals", "plans or approvals", "target timing"), ("structural changes", "hazardous materials", "high-value work")),
+    profile("hvac", "HVAC & Air Conditioning", "trades", 7, ("system type", "fault or requested work", "site location", "current behaviour", "preferred timing"), ("burning smell", "electrical hazard", "refrigerant concern")),
+    profile("flooring", "Flooring", "trades", 8, ("flooring type", "install or repair", "site location", "approximate area", "subfloor condition")),
+    profile("security", "Security & CCTV", "trades", 9, ("system type", "install or fault", "site location", "coverage required", "existing equipment"), ("active break-in", "personal safety threat", "privacy concern")),
+    profile("carpentry", "Carpentry & Woodwork", "trades", 10, ("item or structure", "repair or new work", "site location", "materials or dimensions", "desired timing"), ("structural failure", "unsafe stairs or barriers")),
+    profile("fencing", "Fencing & Gates", "trades", 11, ("fence or gate type", "repair or installation", "site location", "approximate length", "automation needs"), ("electrical gate hazard", "pool-safety barrier")),
+    profile("tiling", "Tiling", "trades", 12, ("area to tile", "site location", "installation or repair", "approximate area", "tile availability"), ("water damage", "hazardous materials")),
+    profile("welding", "Welding & Metal Works", "trades", 13, ("item or structure", "material", "repair or fabrication", "site location", "dimensions or drawings"), ("load-bearing failure", "fuel or gas container", "hot-work hazard")),
 
     profile("cleaning", "Cleaning", "home-services", 1, escalation=("biohazard", "hazardous chemicals", "crime scene")),
     profile("landscaping", "Landscaping & Gardening", "home-services", 2, escalation=("dangerous tree", "power-line proximity", "chemical exposure")),

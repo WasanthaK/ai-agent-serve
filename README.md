@@ -133,7 +133,7 @@ Service-delivery reasoning is packaged as versioned skills rather than one hardc
 
 The registry composes the strict output schema and model instructions, rejects duplicate names and detects conflicting field definitions. See [Skills Architecture](docs/SKILLS.md).
 
-The service catalogue adds 47 selectable domain profiles. Six group headers
+The service catalogue adds 47 selectable domain profiles. Seven group headers
 remain non-selectable. Each profile provides focused intake topics and
 domain-specific escalation signals without duplicating shared workflow skills.
 

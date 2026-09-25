@@ -12,7 +12,7 @@ from agent_skills.service_catalog import (
 
 class ServiceCatalogTests(unittest.TestCase):
     def test_catalogue_contains_expected_taxonomy(self):
-        self.assertEqual(len(GROUPS), 6)
+        self.assertEqual(len(GROUPS), 7)
         self.assertEqual(len(SERVICES), 47)
         self.assertEqual(len({profile.slug for profile in SERVICES}), 47)
 
@@ -22,7 +22,7 @@ class ServiceCatalogTests(unittest.TestCase):
 
     def test_exact_service_lookup(self):
         self.assertEqual(service_catalog.get("plumbing").label, "Plumbing")
-        self.assertIsNone(service_catalog.get("plumbing").group_slug)
+        self.assertEqual(service_catalog.get("plumbing").group_slug, "trades")
         self.assertIn("burning smell", service_catalog.get("hvac").escalation_topics)
 
     def test_group_lookup_excludes_header(self):
@@ -30,6 +30,11 @@ class ServiceCatalogTests(unittest.TestCase):
         self.assertEqual(len(profiles), 9)
         self.assertEqual(profiles[0].slug, "cleaning")
         self.assertEqual(profiles[-1].slug, "appliance-repair")
+
+        trades = service_catalog.services_for_group("trades")
+        self.assertEqual(len(trades), 13)
+        self.assertEqual(trades[0].slug, "plumbing")
+        self.assertEqual(trades[-1].slug, "welding")
 
     def test_unknown_group_reference_is_rejected(self):
         with self.assertRaises(ValueError):

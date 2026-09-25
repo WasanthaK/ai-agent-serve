@@ -61,13 +61,12 @@ The current follow-up tool remains restricted by workflow state in the API.
 ## Service skill catalogue
 
 Workflow skills are composed with a selected domain profile. The catalogue
-contains 47 selectable service profiles and six non-selectable group headers.
+contains 47 selectable service profiles and seven non-selectable group headers.
 Each profile defines a stable slug, label, optional group, display order,
 version, focused intake topics and domain-specific escalation topics.
 
-The first 13 trade and construction profiles have no parent group because the
-source taxonomy did not include that group's slug. The server does not invent
-a replacement taxonomy value.
+The 13 trade and construction profiles belong to the non-selectable `trades`
+group.
 
 The catalogue validates unique slugs, valid group references, selectability
 and required intake topics. This data-driven model avoids 47 nearly identical
