@@ -1,53 +1,101 @@
-# Agent Architecture
+# Mac Mini AI Agent Server
 
-## Design principle
+A lightweight, Docker-based AI agent server built with FastAPI, OpenAI and PostgreSQL.
 
-The Mac Mini is a lightweight, always-on orchestration node. It receives requests, coordinates AI analysis, maintains workflow state, invokes approved tools and records every significant event.
+The project demonstrates how a low-resource Mac Mini can operate as an always-on AI orchestration node while model inference runs in the cloud or, later, on a separate GPU server.
 
-Large-model inference remains external and can be provided by a cloud model or, later, a separate GPU workstation.
+## What it does
 
-## System architecture
+The server can:
+
+- Receive quote requests through a webhook
+- Analyse requests using strict structured output
+- Identify essential missing information
+- Generate customer follow-up questions
+- Maintain persistent workflow state
+- Escalate sensitive requests for human review
+- Approve or reject requests
+- Accept and store customer replies
+- Reanalyse the complete conversation
+- Execute explicitly registered tools
+- Restrict tools according to workflow status
+- Preserve a chronological audit trail
+
+## Architecture
 
 ```text
-Website / App / Messaging Channel
-                |
-                v
-      POST /webhook/quote-request
-                |
-                v
-        FastAPI Agent Server
-                |
-                v
-       Structured AI analysis
-                |
-       +--------+---------+
-       |                  |
-       v                  v
-Missing information   Human review
-       |                  |
-       v                  v
-Follow-up draft      Approve / reject
-       |                  |
-       v                  |
-Customer reply            |
-       |                  |
-       +--------+---------+
-                |
-                v
-          Reanalysis
-                |
-                v
-      PostgreSQL state + events
-                |
-                v
-        Controlled tool layer
+Incoming request
+      |
+      v
+Structured AI analysis
+      |
+      +--> Missing information --> Follow-up draft --> Customer reply
+      |
+      +--> Human review --> Approve / reject
+      |
+      v
+Persistent workflow state
+      |
+      v
+Controlled tools
+      |
+      v
+Audit events
 ```
+
+The Mac Mini coordinates the workflow. It is not required to run a large language model locally.
+
+See [Agent Architecture](docs/AGENT-ARCHITECTURE.md) for the full design.
+
+## Technology
+
+- Ubuntu Server
+- Docker and Docker Compose
+- Python
+- FastAPI
+- Uvicorn
+- OpenAI Responses API
+- PostgreSQL 16
+- Psycopg 3
+
+## Project structure
+
+```text
+agent-server/
+├── app.py
+├── db.py
+├── tools.py
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+├── .env.example
+├── migrations/
+│   ├── 001_phase3_workflow.sql
+│   └── 002_phase3_customer_replies.sql
+├── tests/
+│   └── smoke_phase3.py
+└── docs/
+    ├── AGENT-ARCHITECTURE.md
+    ├── INSTALLATION.md
+    └── TROUBLESHOOTING.md
+```
+
+## Workflow states
+
+| Status | Meaning |
+|---|---|
+| `needs_information` | Essential customer information is missing |
+| `awaiting_human_review` | A human decision is required |
+| `ready` | Sufficient information is available |
+| `approved` | A human approved an escalated request |
+| `rejected` | A human rejected the request |
+| `actioned` | Reserved for a completed external action |
+
+Invalid transitions are rejected with HTTP `409 Conflict`.
 
 ## Structured analysis
 
-The model returns strict JSON rather than unstructured prose.
-
-Current analysis fields are:
+Each request is converted into:
 
 - `intent`
 - `category`
@@ -58,240 +106,103 @@ Current analysis fields are:
 - `missing_information`
 - `follow_up_questions`
 
-The application uses these fields to calculate workflow status and determine which actions are permitted.
+## Persistent data
 
-## Workflow states
+PostgreSQL stores three related record types:
 
-### `needs_information`
+- `agent_requests` — original request, current analysis and status
+- `agent_messages` — later customer or workflow messages
+- `agent_events` — append-only workflow and tool history
 
-Essential information is missing. The agent can prepare a customer follow-up draft.
+Every request receives a UUID.
 
-### `awaiting_human_review`
+## Controlled tools
 
-The request is urgent, dangerous, high-value, legally sensitive or unusual. A human must approve or reject it.
-
-### `ready`
-
-The agent has enough information and no mandatory human review is required.
-
-### `approved`
-
-A human has approved a request that required review.
-
-### `rejected`
-
-A human rejected the request. Further workflow tools are blocked.
-
-### `actioned`
-
-Reserved for a future external action that has completed successfully.
-
-## Status selection
-
-Status is derived in this order:
-
-1. If essential information is missing, use `needs_information`.
-2. Otherwise, if human review is required, use `awaiting_human_review`.
-3. Otherwise, use `ready`.
-
-This ordering allows missing information to be collected before a later decision is made about escalation.
-
-## Persistent conversation
-
-The initial customer request remains in `agent_requests.message`.
-
-Later replies are stored separately in `agent_messages`. During reanalysis, the server combines:
-
-1. The original request
-2. All stored customer replies
-3. Their chronological order
-
-The model then analyses the complete conversation. It should not ask again for information already supplied.
-
-## Human in the loop
-
-Requests in `awaiting_human_review` can be approved through:
-
-```text
-POST /requests/{request_id}/approve
-```
-
-Active requests can be rejected through:
-
-```text
-POST /requests/{request_id}/reject
-```
-
-Invalid transitions return HTTP `409 Conflict`. For example, an already approved request cannot be approved again.
-
-## Controlled tool layer
-
-Tools are registered explicitly in `tools.py`.
-
-The current registry contains:
+The current tool registry contains:
 
 ```text
 prepare_customer_follow_up
 ```
 
-This tool:
+It prepares a draft response from the stored follow-up questions. It does not send the message.
 
-- Runs only when the request status is `needs_information`
-- Uses the stored follow-up questions
-- Produces a customer-friendly draft
-- Marks the result as `draft_only`
-- Does not send anything externally
-
-A tool that is absent from the registry cannot execute. A registered tool also cannot execute from an unauthorised workflow state.
-
-## Audit events
-
-Important activity is recorded in `agent_events`.
-
-Current event types include:
-
-- `request_created`
-- `customer_message_received`
-- `request_reanalysed`
-- `request_approved`
-- `request_rejected`
-- `tool_started`
-- `tool_completed`
-- `tool_failed`
-- `reanalysis_failed`
-
-Each event records:
-
-- Event UUID
-- Request UUID
-- Event type
-- Actor
-- JSON details
-- Creation timestamp
-
-This produces a chronological audit trail without overwriting earlier events.
-
-## Database model
-
-### `agent_requests`
-
-Stores the original request, current analysis and current workflow state.
-
-### `agent_messages`
-
-Stores later conversation messages linked to the request.
-
-### `agent_events`
-
-Stores an append-only history of workflow decisions and tool activity.
-
-## API endpoints
-
-### Health
+The tool can run only when:
 
 ```text
-GET /
+status = needs_information
 ```
 
-### Direct analysis
+Rejected or otherwise incompatible requests cannot execute it.
+
+## Main API endpoints
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/` | Health and version |
+| `POST` | `/agent` | Direct structured analysis |
+| `POST` | `/webhook/quote-request` | Create and analyse a request |
+| `GET` | `/requests/{request_id}` | Retrieve the current request |
+| `GET` | `/requests/{request_id}/messages` | Retrieve conversation history |
+| `GET` | `/requests/{request_id}/events` | Retrieve audit history |
+| `POST` | `/requests/{request_id}/reply` | Save a customer reply and reanalyse |
+| `POST` | `/requests/{request_id}/approve` | Approve a reviewed request |
+| `POST` | `/requests/{request_id}/reject` | Reject an active request |
+| `POST` | `/requests/{request_id}/tools/{tool_name}` | Execute an allowed tool |
+
+Interactive API documentation is available at:
 
 ```text
-POST /agent
+http://SERVER_ADDRESS:8000/docs
 ```
 
-### Quote intake
+## Quick start
 
-```text
-POST /webhook/quote-request
+Copy the environment template:
+
+```bash
+cp .env.example .env
 ```
 
-### Request retrieval
+Add the required secrets to `.env`, then start the services:
 
-```text
-GET /requests/{request_id}
+```bash
+docker compose up -d --build
 ```
 
-### Conversation history
+Check service health:
 
-```text
-GET /requests/{request_id}/messages
+```bash
+docker compose ps
+curl http://localhost:8000/
 ```
 
-### Event history
+Expected response:
 
-```text
-GET /requests/{request_id}/events
+```json
+{
+  "status": "running",
+  "service": "agent-server",
+  "version": "3.1.0"
+}
 ```
 
-### Customer reply and reanalysis
+For complete setup instructions, see [Installation Guide](docs/INSTALLATION.md).
 
-```text
-POST /requests/{request_id}/reply
+## Database migrations
+
+For an existing PostgreSQL container:
+
+```bash
+docker exec -i agent-postgres \
+  psql -U agentuser -d agentdb \
+  < migrations/001_phase3_workflow.sql
+
+docker exec -i agent-postgres \
+  psql -U agentuser -d agentdb \
+  < migrations/002_phase3_customer_replies.sql
 ```
 
-### Human decisions
-
-```text
-POST /requests/{request_id}/approve
-POST /requests/{request_id}/reject
-```
-
-### Controlled tool execution
-
-```text
-POST /requests/{request_id}/tools/{tool_name}
-```
-
-## Failure handling
-
-A customer reply is stored before AI reanalysis begins. If the model call fails:
-
-- The customer message remains safely stored.
-- A `reanalysis_failed` event is recorded.
-- The endpoint returns HTTP `502`.
-- The request can be retried without losing the customer’s reply.
-
-Tool failures similarly create a `tool_failed` event.
-
-## Deployment
-
-The application runs through Docker Compose with:
-
-- FastAPI and Uvicorn
-- PostgreSQL 16
-- Container health checks
-- Persistent PostgreSQL storage
-- Memory limits suitable for the Mac Mini
-
-Database changes are stored as versioned SQL migrations in `migrations/`.
-
-## Security boundary
-
-The current system is suitable for local development and controlled testing. Before exposing it publicly, it requires:
-
-- Webhook authentication
-- API authentication and authorisation
-- Secret rotation
-- HTTPS through a reverse proxy or secure tunnel
-- Rate limiting
-- Request-size controls
-- Restricted network exposure
-- Production logging and monitoring
-
-## Future integrations
-
-The controlled tool layer can later support:
-
-- Quixo operations
-- Email and messaging adapters
-- WhatsApp
-- CRM actions
-- Scheduling
-- MCP servers
-- External APIs
-- A separate GPU workstation for local inference
-
-Every future tool should remain registered, state-aware, auditable and restricted according to its risk.
+The migrations are idempotent and can be rerun safely.
 
 ## Phase 3 smoke test
 
@@ -301,16 +212,31 @@ Run the end-to-end workflow test while the containers are running:
 python3 tests/smoke_phase3.py
 ```
 
-The test verifies:
-
-- Service health and API version
-- Missing-information detection
-- Controlled follow-up drafting
-- Customer replies and conversational reanalysis
-- Persistent messages
-- Workflow audit events
-- Safety escalation
-- Human approval
-- Invalid state-transition protection
+The test verifies service health, missing-information detection, controlled follow-up drafting, conversational reanalysis, persistence, audit events, safety escalation, human approval and invalid-transition protection.
 
 The smoke test creates test records in PostgreSQL and makes live model calls.
+
+## Security
+
+Never commit `.env` or real API credentials.
+
+The current implementation is intended for local development and controlled testing. Before public exposure, add API and webhook authentication, HTTPS, authorisation, rate limiting, request-size limits, production monitoring and secret rotation.
+
+## Development history
+
+- Phase 1 — Dockerised FastAPI agent with structured AI analysis
+- Phase 2 — PostgreSQL persistence and UUID request tracking
+- Phase 3A — Workflow states, human review and event history
+- Phase 3B — Registered, state-aware tools
+- Phase 3C — Persistent customer replies and conversational reanalysis
+
+## Roadmap
+
+- Unit tests and CI automation
+- Webhook authentication
+- API authorisation
+- Structured logging and observability
+- Real channel adapters
+- Approved outbound delivery tools
+- MCP integration
+- Optional local GPU inference
