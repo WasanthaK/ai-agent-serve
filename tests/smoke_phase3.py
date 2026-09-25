@@ -49,7 +49,7 @@ def main():
 
     require(status == 200, "Health endpoint did not return 200")
     require(
-        health.get("version") == "3.1.0",
+        health.get("version") == "3.2.0",
         "Unexpected API version",
     )
     pass_step("service health and version")

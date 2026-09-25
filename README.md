@@ -19,6 +19,8 @@ The server can:
 - Reanalyse the complete conversation
 - Execute explicitly registered tools
 - Restrict tools according to workflow status
+- Apply category-specific intake and escalation profiles
+- Publish the service taxonomy through a read-only endpoint
 - Preserve a chronological audit trail
 
 ## Architecture
@@ -65,6 +67,11 @@ agent-server/
 ├── app.py
 ├── db.py
 ├── tools.py
+├── agent_skills/
+│   ├── base.py
+│   ├── definitions.py
+│   ├── registry.py
+│   └── service_catalog.py
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
@@ -73,7 +80,8 @@ agent-server/
 │   ├── 001_phase3_workflow.sql
 │   └── 002_phase3_customer_replies.sql
 ├── tests/
-│   └── smoke_phase3.py
+│   ├── smoke_phase3.py
+│   └── smoke_phase4.py
 └── docs/
     ├── AGENT-ARCHITECTURE.md
     ├── INSTALLATION.md
@@ -117,6 +125,21 @@ PostgreSQL stores three related record types:
 
 Every request receives a UUID.
 
+## Reusable skills
+
+Service-delivery reasoning is packaged as versioned skills rather than one hardcoded prompt. The initial registry contains:
+
+- `request_intake`
+- `request_clarification`
+- `safety_triage`
+- `customer_communication`
+
+The registry composes the strict output schema and model instructions, rejects duplicate names and detects conflicting field definitions. See [Skills Architecture](docs/SKILLS.md).
+
+The service catalogue adds 47 selectable domain profiles. Seven group headers
+remain non-selectable. Each profile provides focused intake topics and
+domain-specific escalation signals without duplicating shared workflow skills.
+
 ## Controlled tools
 
 The current tool registry contains:
@@ -140,6 +163,7 @@ Rejected or otherwise incompatible requests cannot execute it.
 | Method | Endpoint | Purpose |
 |---|---|---|
 | `GET` | `/` | Health and version |
+| `GET` | `/service-catalog` | Retrieve service groups and skill profiles |
 | `POST` | `/agent` | Direct structured analysis |
 | `POST` | `/webhook/quote-request` | Create and analyse a request |
 | `GET` | `/requests/{request_id}` | Retrieve the current request |
@@ -183,7 +207,7 @@ Expected response:
 {
   "status": "running",
   "service": "agent-server",
-  "version": "3.1.0"
+  "version": "3.2.0"
 }
 ```
 
@@ -216,6 +240,18 @@ python3 tests/smoke_phase3.py
 The test verifies service health, missing-information detection, controlled follow-up drafting, conversational reanalysis, persistence, audit events, safety escalation, human approval and invalid-transition protection.
 
 The smoke test creates test records in PostgreSQL and makes live model calls.
+
+## Phase 4 skill smoke test
+
+After deploying version 3.2.0, run:
+
+```bash
+python3 tests/smoke_phase4.py
+```
+
+This verifies the published catalogue, strict plumbing classification,
+profile-guided clarification and dangerous electrical escalation. It creates
+two test records and makes two live model calls.
 
 ## Security
 
