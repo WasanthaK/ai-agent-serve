@@ -45,7 +45,7 @@ Audit events
 
 The Mac Mini coordinates the workflow. It is not required to run a large language model locally.
 
-See [Agent Architecture](docs/AGENT-ARCHITECTURE.md) for the full design.
+See [Agent Architecture](docs/AGENT-ARCHITECTURE.md) for the full design and the [Technical Roadmap](docs/TECHNICAL-ROADMAP.md) for the planned service-delivery agent platform.
 
 ## Technology
 
@@ -77,6 +77,7 @@ agent-server/
 └── docs/
     ├── AGENT-ARCHITECTURE.md
     ├── INSTALLATION.md
+    ├── TECHNICAL-ROADMAP.md
     └── TROUBLESHOOTING.md
 ```
 
@@ -232,11 +233,6 @@ The current implementation is intended for local development and controlled test
 
 ## Roadmap
 
-- Unit tests and CI automation
-- Webhook authentication
-- API authorisation
-- Structured logging and observability
-- Real channel adapters
-- Approved outbound delivery tools
-- MCP integration
-- Optional local GPU inference
+The next stage introduces reusable service-delivery skills, authentication, authorization, observability and a channel-neutral request inbox. Later phases add provider routing, quotation workflows, delivery coordination and service closure.
+
+See the complete [Technical Roadmap](docs/TECHNICAL-ROADMAP.md).
