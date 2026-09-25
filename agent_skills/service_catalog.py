@@ -8,6 +8,14 @@ class ServiceGroup:
     display_order: int
     selectable: bool = False
 
+    def as_dict(self):
+        return {
+            "slug": self.slug,
+            "label": self.label,
+            "display_order": self.display_order,
+            "selectable": self.selectable,
+        }
+
 
 @dataclass(frozen=True)
 class ServiceSkillProfile:
@@ -30,6 +38,18 @@ class ServiceSkillProfile:
             "legal, financial, or emergency advice. Collect facts and route "
             "the request safely."
         )
+
+    def as_dict(self):
+        return {
+            "slug": self.slug,
+            "label": self.label,
+            "group_slug": self.group_slug,
+            "display_order": self.display_order,
+            "version": self.version,
+            "selectable": self.selectable,
+            "intake_topics": list(self.intake_topics),
+            "escalation_topics": list(self.escalation_topics),
+        }
 
 
 class ServiceCatalog:
@@ -82,6 +102,30 @@ class ServiceCatalog:
         if group_slug is not None and group_slug not in self._groups_by_slug:
             raise KeyError(f"Service group is not registered: {group_slug}")
         return tuple(p for p in self._services if p.group_slug == group_slug)
+
+    def build_analysis_instructions(self):
+        lines = [
+            "## Service profile catalogue",
+            "After selecting the category slug, apply only that profile's "
+            "intake and escalation topics. Intake topics are prompts for "
+            "relevance, not a checklist: ask only for information required "
+            "for the next practical step. Escalation topics require human "
+            "review when they are present or reasonably suspected.",
+        ]
+        for profile in self._services:
+            intake = ", ".join(profile.intake_topics)
+            escalation = ", ".join(profile.escalation_topics) or "general safety policy"
+            lines.append(
+                f"- {profile.slug}: intake [{intake}]; "
+                f"escalate [{escalation}]"
+            )
+        return "\n".join(lines)
+
+    def as_dict(self):
+        return {
+            "groups": [group.as_dict() for group in self._groups],
+            "services": [profile.as_dict() for profile in self._services],
+        }
 
 
 GROUPS = (

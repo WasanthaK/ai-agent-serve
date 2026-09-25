@@ -52,6 +52,20 @@ class ServiceCatalogTests(unittest.TestCase):
         self.assertIn("medical emergency", instructions)
         self.assertIn("Do not provide regulated", instructions)
 
+    def test_analysis_instructions_include_each_profile_once(self):
+        instructions = service_catalog.build_analysis_instructions()
+        self.assertEqual(instructions.count("- plumbing:"), 1)
+        self.assertEqual(instructions.count("- health-wellness:"), 1)
+        self.assertIn("ask only for information required", instructions)
+
+    def test_catalogue_serializes_for_api(self):
+        result = service_catalog.as_dict()
+        self.assertEqual(len(result["groups"]), 7)
+        self.assertEqual(len(result["services"]), 47)
+        self.assertFalse(result["groups"][0]["selectable"])
+        self.assertTrue(result["services"][0]["selectable"])
+        self.assertEqual(result["services"][0]["group_slug"], "trades")
+
 
 if __name__ == "__main__":
     unittest.main()

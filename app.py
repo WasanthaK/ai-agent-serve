@@ -17,13 +17,17 @@ from db import (
     update_request_analysis,
     update_request_status,
 )
-from agent_skills import DEFAULT_ANALYSIS_SKILLS, skill_registry
+from agent_skills import (
+    DEFAULT_ANALYSIS_SKILLS,
+    service_catalog,
+    skill_registry,
+)
 from tools import ToolExecutionError, execute_tool
 
 
 app = FastAPI(
     title="Mac Mini Agent Server",
-    version="3.1.0",
+    version="3.2.0",
 )
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -69,7 +73,7 @@ QUOTE_ANALYSIS_SCHEMA = skill_registry.build_json_schema(
 
 QUOTE_ANALYSIS_INSTRUCTIONS = skill_registry.build_instructions(
     DEFAULT_ANALYSIS_SKILLS
-)
+) + "\n\n" + service_catalog.build_analysis_instructions()
 
 
 def analyze_quote_request(
@@ -104,8 +108,13 @@ def health():
     return {
         "status": "running",
         "service": "agent-server",
-        "version": "3.1.0",
+        "version": "3.2.0",
     }
+
+
+@app.get("/service-catalog")
+def retrieve_service_catalog():
+    return service_catalog.as_dict()
 
 
 @app.post("/agent")

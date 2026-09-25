@@ -19,6 +19,8 @@ The server can:
 - Reanalyse the complete conversation
 - Execute explicitly registered tools
 - Restrict tools according to workflow status
+- Apply category-specific intake and escalation profiles
+- Publish the service taxonomy through a read-only endpoint
 - Preserve a chronological audit trail
 
 ## Architecture
@@ -160,6 +162,7 @@ Rejected or otherwise incompatible requests cannot execute it.
 | Method | Endpoint | Purpose |
 |---|---|---|
 | `GET` | `/` | Health and version |
+| `GET` | `/service-catalog` | Retrieve service groups and skill profiles |
 | `POST` | `/agent` | Direct structured analysis |
 | `POST` | `/webhook/quote-request` | Create and analyse a request |
 | `GET` | `/requests/{request_id}` | Retrieve the current request |
@@ -203,7 +206,7 @@ Expected response:
 {
   "status": "running",
   "service": "agent-server",
-  "version": "3.1.0"
+  "version": "3.2.0"
 }
 ```
 

@@ -76,6 +76,20 @@ The request-intake schema uses the 47 service slugs as a strict JSON Schema
 enum. The model therefore returns a stable machine-readable category such as
 `plumbing` or `airport-transfers`, never a group header or an invented label.
 
+At runtime the catalogue contributes a compact instruction block containing
+the intake and escalation topics for every profile. Once a category is
+selected, the agent applies only that profile. Intake topics guide relevant
+clarification rather than forcing a questionnaire.
+
+The complete machine-readable taxonomy is available from:
+
+```text
+GET /service-catalog
+```
+
+This endpoint is read-only and can be consumed by Quixo forms, channel
+adapters and future provider-routing components.
+
 ## Compatibility
 
 Phase 4A intentionally preserves the existing API response schema and workflow states. The source of the model instructions and JSON schema changes; observable endpoint behaviour should not.
