@@ -58,6 +58,25 @@ Skills may declare the tools they are permitted to use. This metadata is the fou
 
 The current follow-up tool remains restricted by workflow state in the API.
 
+## Service skill catalogue
+
+Workflow skills are composed with a selected domain profile. The catalogue
+contains 47 selectable service profiles and six non-selectable group headers.
+Each profile defines a stable slug, label, optional group, display order,
+version, focused intake topics and domain-specific escalation topics.
+
+The first 13 trade and construction profiles have no parent group because the
+source taxonomy did not include that group's slug. The server does not invent
+a replacement taxonomy value.
+
+The catalogue validates unique slugs, valid group references, selectability
+and required intake topics. This data-driven model avoids 47 nearly identical
+Python modules while keeping every domain profile independently testable.
+
+The request-intake schema uses the 47 service slugs as a strict JSON Schema
+enum. The model therefore returns a stable machine-readable category such as
+`plumbing` or `airport-transfers`, never a group header or an invented label.
+
 ## Compatibility
 
 Phase 4A intentionally preserves the existing API response schema and workflow states. The source of the model instructions and JSON schema changes; observable endpoint behaviour should not.
@@ -68,6 +87,12 @@ Run the registry unit tests:
 
 ```bash
 python3 -m unittest tests/test_skill_registry.py -v
+```
+
+Run the catalogue tests:
+
+```bash
+python3 -m unittest tests/test_service_catalog.py -v
 ```
 
 Run the Phase 3 end-to-end regression test against the live containers:

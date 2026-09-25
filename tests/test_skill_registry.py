@@ -31,6 +31,9 @@ class SkillRegistryTests(unittest.TestCase):
                 "follow_up_questions",
             },
         )
+        self.assertEqual(len(schema["properties"]["category"]["enum"]), 47)
+        self.assertIn("plumbing", schema["properties"]["category"]["enum"])
+        self.assertNotIn("home-services", schema["properties"]["category"]["enum"])
 
     def test_duplicate_skill_name_is_rejected(self):
         registry = SkillRegistry()

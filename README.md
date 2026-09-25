@@ -68,7 +68,8 @@ agent-server/
 ├── agent_skills/
 │   ├── base.py
 │   ├── definitions.py
-│   └── registry.py
+│   ├── registry.py
+│   └── service_catalog.py
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
@@ -131,6 +132,10 @@ Service-delivery reasoning is packaged as versioned skills rather than one hardc
 - `customer_communication`
 
 The registry composes the strict output schema and model instructions, rejects duplicate names and detects conflicting field definitions. See [Skills Architecture](docs/SKILLS.md).
+
+The service catalogue adds 47 selectable domain profiles. Six group headers
+remain non-selectable. Each profile provides focused intake topics and
+domain-specific escalation signals without duplicating shared workflow skills.
 
 ## Controlled tools
 

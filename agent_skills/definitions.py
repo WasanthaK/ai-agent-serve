@@ -1,4 +1,11 @@
 from agent_skills.base import AgentSkill
+from agent_skills.service_catalog import SERVICES
+
+
+SERVICE_CATEGORY_SLUGS = tuple(profile.slug for profile in SERVICES)
+SERVICE_CATEGORY_GUIDE = ", ".join(
+    f"{profile.slug}={profile.label}" for profile in SERVICES
+)
 
 
 REQUEST_INTAKE = AgentSkill(
@@ -11,10 +18,19 @@ You are analysing a service-delivery request.
 Determine the customer's intent, the service category, a concise factual
 summary, the urgency, and the next practical action. Do not claim that an
 appointment, price, availability, or service has been confirmed.
+
+Return category as exactly one service slug from this catalogue:
+""" + SERVICE_CATEGORY_GUIDE + """
+
+Use `other` only when none of the more specific services fits. Group headers
+are never valid service categories.
 """,
     schema_properties={
         "intent": {"type": "string"},
-        "category": {"type": "string"},
+        "category": {
+            "type": "string",
+            "enum": list(SERVICE_CATEGORY_SLUGS),
+        },
         "summary": {"type": "string"},
         "urgency": {"type": "string"},
         "next_action": {"type": "string"},
