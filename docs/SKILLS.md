@@ -114,4 +114,10 @@ Run the Phase 3 end-to-end regression test against the live containers:
 python3 tests/smoke_phase3.py
 ```
 
+Run the Phase 4 live skill test:
+
+```bash
+python3 tests/smoke_phase4.py
+```
+
 A skill change is not complete until both its unit tests and the relevant end-to-end workflow tests pass.

@@ -80,7 +80,8 @@ agent-server/
 │   ├── 001_phase3_workflow.sql
 │   └── 002_phase3_customer_replies.sql
 ├── tests/
-│   └── smoke_phase3.py
+│   ├── smoke_phase3.py
+│   └── smoke_phase4.py
 └── docs/
     ├── AGENT-ARCHITECTURE.md
     ├── INSTALLATION.md
@@ -239,6 +240,18 @@ python3 tests/smoke_phase3.py
 The test verifies service health, missing-information detection, controlled follow-up drafting, conversational reanalysis, persistence, audit events, safety escalation, human approval and invalid-transition protection.
 
 The smoke test creates test records in PostgreSQL and makes live model calls.
+
+## Phase 4 skill smoke test
+
+After deploying version 3.2.0, run:
+
+```bash
+python3 tests/smoke_phase4.py
+```
+
+This verifies the published catalogue, strict plumbing classification,
+profile-guided clarification and dangerous electrical escalation. It creates
+two test records and makes two live model calls.
 
 ## Security
 
