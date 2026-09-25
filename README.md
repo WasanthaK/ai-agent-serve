@@ -65,6 +65,10 @@ agent-server/
 ├── app.py
 ├── db.py
 ├── tools.py
+├── agent_skills/
+│   ├── base.py
+│   ├── definitions.py
+│   └── registry.py
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
@@ -116,6 +120,17 @@ PostgreSQL stores three related record types:
 - `agent_events` — append-only workflow and tool history
 
 Every request receives a UUID.
+
+## Reusable skills
+
+Service-delivery reasoning is packaged as versioned skills rather than one hardcoded prompt. The initial registry contains:
+
+- `request_intake`
+- `request_clarification`
+- `safety_triage`
+- `customer_communication`
+
+The registry composes the strict output schema and model instructions, rejects duplicate names and detects conflicting field definitions. See [Skills Architecture](docs/SKILLS.md).
 
 ## Controlled tools
 

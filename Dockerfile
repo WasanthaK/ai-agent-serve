@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 COPY db.py .
 COPY tools.py .
+COPY agent_skills ./agent_skills
 
 EXPOSE 8000
 

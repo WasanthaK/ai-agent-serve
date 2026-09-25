@@ -17,6 +17,7 @@ from db import (
     update_request_analysis,
     update_request_status,
 )
+from agent_skills import DEFAULT_ANALYSIS_SKILLS, skill_registry
 from tools import ToolExecutionError, execute_tool
 
 
@@ -62,52 +63,13 @@ class CustomerReply(BaseModel):
     )
 
 
-QUOTE_ANALYSIS_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "intent": {
-            "type": "string",
-        },
-        "category": {
-            "type": "string",
-        },
-        "summary": {
-            "type": "string",
-        },
-        "urgency": {
-            "type": "string",
-        },
-        "next_action": {
-            "type": "string",
-        },
-        "needs_human_review": {
-            "type": "boolean",
-        },
-        "missing_information": {
-            "type": "array",
-            "items": {
-                "type": "string",
-            },
-        },
-        "follow_up_questions": {
-            "type": "array",
-            "items": {
-                "type": "string",
-            },
-        },
-    },
-    "required": [
-        "intent",
-        "category",
-        "summary",
-        "urgency",
-        "next_action",
-        "needs_human_review",
-        "missing_information",
-        "follow_up_questions",
-    ],
-    "additionalProperties": False,
-}
+QUOTE_ANALYSIS_SCHEMA = skill_registry.build_json_schema(
+    DEFAULT_ANALYSIS_SKILLS
+)
+
+QUOTE_ANALYSIS_INSTRUCTIONS = skill_registry.build_instructions(
+    DEFAULT_ANALYSIS_SKILLS
+)
 
 
 def analyze_quote_request(
@@ -117,34 +79,7 @@ def analyze_quote_request(
 ):
     response = client.responses.create(
         model="gpt-5.6",
-        instructions="""
-You are a quotation intake agent.
-
-Analyse an incoming customer request and return structured information
-for workflow automation.
-
-Identify information that is genuinely required before a service
-provider can meaningfully respond to the request. Do not demand every
-possible detail. Only identify information whose absence prevents the
-next practical step.
-
-For each missing item, produce one short, customer-friendly follow-up
-question. If no essential information is missing, return empty arrays
-for missing_information and follow_up_questions.
-
-Set needs_human_review to true for requests that are urgent, dangerous,
-high-value, legally sensitive, or unusual. Do not mark an ordinary
-request for human review merely because information is missing; use
-missing_information and follow_up_questions for that situation.
-
-The input may contain the original request followed by later customer
-replies. Analyse the complete conversation. Treat information supplied
-in later replies as answering earlier missing-information questions.
-Do not ask again for information the customer has already provided.
-
-Do not claim that an appointment, price, availability, or service has
-been confirmed.
-""",
+        instructions=QUOTE_ANALYSIS_INSTRUCTIONS,
         input=f"""
 Source: {source}
 Customer: {customer_name or "Unknown"}
