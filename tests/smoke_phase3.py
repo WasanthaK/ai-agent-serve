@@ -9,11 +9,25 @@ BASE_URL = os.getenv(
     "AGENT_BASE_URL",
     "http://localhost:8000",
 ).rstrip("/")
+INBOUND_SOURCE = os.getenv("AGENT_INBOUND_SOURCE", "website")
+
+
+def api_key_for(path):
+    if path in ("/", "/service-catalog"):
+        return None
+    name = "AGENT_INBOUND_API_KEY" if path.startswith("/webhook/quote-request") else "AGENT_OPERATOR_API_KEY"
+    key = os.getenv(name)
+    if not key:
+        raise RuntimeError(f"Set {name} before running the smoke test")
+    return key
 
 
 def api_request(method, path, body=None):
     data = None
     headers = {}
+    key = api_key_for(path)
+    if key:
+        headers["X-API-Key"] = key
 
     if body is not None:
         data = json.dumps(body).encode("utf-8")
@@ -49,7 +63,7 @@ def main():
 
     require(status == 200, "Health endpoint did not return 200")
     require(
-        health.get("version") == "3.2.0",
+        health.get("version") == "3.3.0",
         "Unexpected API version",
     )
     pass_step("service health and version")
@@ -58,7 +72,7 @@ def main():
         "POST",
         "/webhook/quote-request",
         {
-            "source": "smoke-test",
+            "source": INBOUND_SOURCE,
             "customer_name": "Phase 3 Smoke Test",
             "message": "I need a plumber.",
         },
@@ -102,7 +116,7 @@ def main():
 
     status, reply_result = api_request(
         "POST",
-        f"/requests/{incomplete_id}/reply",
+        f"/webhook/quote-request/{incomplete_id}/reply",
         {
             "message": (
                 "The kitchen tap is dripping continuously from the "
@@ -130,7 +144,7 @@ def main():
 
     status, duplicate_reply = api_request(
         "POST",
-        f"/requests/{incomplete_id}/reply",
+        f"/webhook/quote-request/{incomplete_id}/reply",
         {
             "message": "This duplicate reply must be rejected."
         },
@@ -181,7 +195,7 @@ def main():
         "POST",
         "/webhook/quote-request",
         {
-            "source": "smoke-test",
+            "source": INBOUND_SOURCE,
             "customer_name": "Safety Workflow Test",
             "message": (
                 "There is a strong gas smell beside the kitchen stove "
@@ -206,7 +220,6 @@ def main():
         "POST",
         f"/requests/{safety_id}/approve",
         {
-            "actor": "Phase 3 Smoke Test",
             "reason": "Automated human-review workflow test",
         },
     )
@@ -226,7 +239,6 @@ def main():
         "POST",
         f"/requests/{safety_id}/approve",
         {
-            "actor": "Phase 3 Smoke Test",
             "reason": "Duplicate approval must fail",
         },
     )

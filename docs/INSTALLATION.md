@@ -120,7 +120,38 @@ chmod 600 .env
 nano .env
 ```
 
-Supply your own OpenAI API key and PostgreSQL password. Never commit `.env`.
+Supply your own OpenAI API key and PostgreSQL password. Generate a distinct
+key for the inbound website adapter and for each operator:
+
+```bash
+python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
+python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
+```
+
+Set `AGENT_INBOUND_API_KEY` to the inbound value and
+`AGENT_INBOUND_SOURCE=website`. Configure operators in
+`AGENT_OPERATOR_CREDENTIALS` as a JSON array. For example, the following
+shows the format in `.env`; replace each short placeholder with a different
+generated key before starting the service:
+
+```text
+AGENT_OPERATOR_CREDENTIALS='[{"id":"primary","key":"<key-1>","permissions":["read","analyze","reply","decide","tools"]},{"id":"viewer","key":"<key-2>","permissions":["read"]}]'
+```
+
+The five permissions are `read` (request and history reads), `analyze`
+(direct analysis), `reply` (manual reply ingestion), `decide` (approve/reject)
+and `tools` (controlled tool execution). Give each person their own key and
+only the permissions they need. Remove an operator entry and restart the
+agent container to revoke access. The API refuses to start with missing,
+short, duplicate or malformed keys or permissions. Never commit `.env`.
+
+For a controlled key rotation, the server also accepts two inbound keys in
+`AGENT_INBOUND_API_KEYS` (a JSON array) in place of the single
+`AGENT_INBOUND_API_KEY`. An operator entry can use `"keys":["<old>","<new>"]`
+in place of `"key":"<current>"`. Never configure both inbound variables
+with values. Restart the agent after adding the new key, verify it, then
+remove the old key and restart again. The API rejects duplicate keys and
+more than two keys per identity.
 
 ## 8. Build and start
 
@@ -130,6 +161,11 @@ docker ps
 ```
 
 Both the API and PostgreSQL containers should become healthy.
+The API is bound to `127.0.0.1:8000` on the Mac Mini. From another computer,
+open an SSH tunnel with `ssh -L 18000:127.0.0.1:8000 USER@HOST` (replace
+`USER@HOST` with your SSH login and host address), then use
+`http://127.0.0.1:18000/`. An external website webhook requires a
+separately configured private TLS ingress before exposure.
 
 ## 9. Test
 
@@ -143,11 +179,22 @@ Quote-request webhook:
 
 ```bash
 curl -X POST http://localhost:8000/webhook/quote-request \
+  -H "X-API-Key: $AGENT_INBOUND_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"source":"website","customer_name":"Test Customer","message":"My kitchen tap is leaking badly and I need someone today."}'
 ```
 
 A successful persisted request returns a UUID `request_id` along with the structured AI analysis.
+Load your keys into the shell securely before using the examples and smoke tests.
+The `.env` file used by Docker Compose is not automatically exported to the shell.
+For the smoke tests, export `AGENT_OPERATOR_API_KEY` in the test shell as the
+key of an operator with all five permissions. This shell variable is only a
+smoke-client setting; the server reads `AGENT_OPERATOR_CREDENTIALS`.
+For a customer reply received by the website adapter, use the inbound key with
+`POST /webhook/quote-request/{request_id}/reply` and a JSON body containing
+`message`. The request must belong to the configured inbound source. The
+operator's key remains available for manually entered replies at
+`POST /requests/{request_id}/reply`. Never give either key to a customer.
 
 ## 10. Verify PostgreSQL
 

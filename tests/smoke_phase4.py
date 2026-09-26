@@ -9,11 +9,25 @@ BASE_URL = os.getenv(
     "AGENT_BASE_URL",
     "http://localhost:8000",
 ).rstrip("/")
+INBOUND_SOURCE = os.getenv("AGENT_INBOUND_SOURCE", "website")
+
+
+def api_key_for(path):
+    if path in ("/", "/service-catalog"):
+        return None
+    name = "AGENT_INBOUND_API_KEY" if path.startswith("/webhook/quote-request") else "AGENT_OPERATOR_API_KEY"
+    key = os.getenv(name)
+    if not key:
+        raise RuntimeError(f"Set {name} before running the smoke test")
+    return key
 
 
 def api_request(method, path, body=None):
     data = None
     headers = {}
+    key = api_key_for(path)
+    if key:
+        headers["X-API-Key"] = key
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -47,7 +61,7 @@ def pass_step(message):
 def main():
     status, health = api_request("GET", "/")
     require(status == 200, "Health endpoint did not return 200")
-    require(health.get("version") == "3.2.0", "Unexpected API version")
+    require(health.get("version") == "3.3.0", "Unexpected API version")
     pass_step("service health and Phase 4 version")
 
     status, catalog = api_request("GET", "/service-catalog")
@@ -70,7 +84,7 @@ def main():
         "POST",
         "/webhook/quote-request",
         {
-            "source": "phase4-smoke-test",
+            "source": INBOUND_SOURCE,
             "customer_name": "Plumbing Skill Test",
             "message": "My kitchen sink is leaking.",
         },
@@ -98,7 +112,7 @@ def main():
         "POST",
         "/webhook/quote-request",
         {
-            "source": "phase4-smoke-test",
+            "source": INBOUND_SOURCE,
             "customer_name": "Electrical Safety Test",
             "message": (
                 "There are sparks coming from exposed wires beside the "
