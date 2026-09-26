@@ -49,16 +49,25 @@ def _record_event(
     return event_id
 
 
+def _apply_safety_precedence(result):
+    """Safety escalation must never be blocked by clarification."""
+    if result.get("needs_human_review"):
+        result["missing_information"] = []
+        result["follow_up_questions"] = []
+    return result
+
+
 def save_request(source, customer_name, message, result):
     request_id = uuid.uuid4()
+    _apply_safety_precedence(result)
 
     missing_information = result.get("missing_information", [])
     follow_up_questions = result.get("follow_up_questions", [])
 
-    if missing_information:
-        status = "needs_information"
-    elif result["needs_human_review"]:
+    if result["needs_human_review"]:
         status = "awaiting_human_review"
+    elif missing_information:
+        status = "needs_information"
     else:
         status = "ready"
 
@@ -245,6 +254,8 @@ def update_request_status(
             )
 
             return updated_request
+
+
 def save_message(
     request_id,
     role,
@@ -324,13 +335,15 @@ def update_request_analysis(
     result,
     actor="agent",
 ):
+    _apply_safety_precedence(result)
+
     missing_information = result.get("missing_information", [])
     follow_up_questions = result.get("follow_up_questions", [])
 
-    if missing_information:
-        new_status = "needs_information"
-    elif result["needs_human_review"]:
+    if result["needs_human_review"]:
         new_status = "awaiting_human_review"
+    elif missing_information:
+        new_status = "needs_information"
     else:
         new_status = "ready"
 
