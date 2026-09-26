@@ -11,12 +11,18 @@ from starlette.requests import Request
 
 INBOUND_KEY = "inbound-" + "a" * 40
 OPERATOR_KEY = "operator-" + "b" * 40
+VIEWER_KEY = "viewer-" + "c" * 40
 OPERATORS = [
     {
-        "id": "test-operator",
+        "id": "wasantha",
         "key": OPERATOR_KEY,
         "permissions": ["read", "analyze", "reply", "decide", "tools"],
-    }
+    },
+    {
+        "id": "viewer",
+        "key": VIEWER_KEY,
+        "permissions": ["read"],
+    },
 ]
 
 with patch.dict(
