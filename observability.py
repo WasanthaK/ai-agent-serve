@@ -6,6 +6,8 @@ import time
 from contextvars import ContextVar
 from uuid import uuid4
 
+from starlette.responses import PlainTextResponse
+
 
 request_logger = logging.getLogger("agent.requests")
 _correlation_id = ContextVar("agent_correlation_id", default=None)
@@ -31,6 +33,19 @@ def _log(event, **fields):
     )
 
 
+async def correlation_exception_handler(request, exc):
+    """Preserve the request correlation ID on otherwise unhandled 500s."""
+    correlation_id = getattr(request.state, "correlation_id", None)
+    headers = {}
+    if correlation_id:
+        headers["X-Correlation-ID"] = correlation_id
+    return PlainTextResponse(
+        "Internal Server Error",
+        status_code=500,
+        headers=headers,
+    )
+
+
 class StructuredRequestLoggingMiddleware:
     """Assign a server-owned correlation ID and log HTTP request outcomes."""
 
@@ -43,6 +58,7 @@ class StructuredRequestLoggingMiddleware:
             return
 
         correlation_id = str(uuid4())
+        scope.setdefault("state", {})["correlation_id"] = correlation_id
         token = _correlation_id.set(correlation_id)
         started = time.perf_counter()
         status_code = None
