@@ -113,7 +113,7 @@ def save_request(source, customer_name, message, result):
                     "source": source,
                     "status": status,
                     "needs_human_review": result["needs_human_review"],
-                    "missing_information": missing_information,
+                    "missing_information_count": len(missing_information),
                 },
             )
 
@@ -251,6 +251,7 @@ def save_message(
     channel,
     message,
     metadata=None,
+    actor=None,
 ):
     message_id = uuid.uuid4()
 
@@ -285,7 +286,7 @@ def save_message(
                 cur,
                 request_id=request_id,
                 event_type=f"{role}_message_received",
-                actor=role,
+                actor=actor or role,
                 details={
                     "message_id": str(message_id),
                     "channel": channel,
@@ -391,7 +392,7 @@ def update_request_analysis(
                     "previous_status": existing["status"],
                     "new_status": new_status,
                     "needs_human_review": result["needs_human_review"],
-                    "missing_information": missing_information,
+                    "missing_information_count": len(missing_information),
                 },
             )
 

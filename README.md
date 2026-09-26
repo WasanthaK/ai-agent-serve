@@ -170,6 +170,7 @@ Rejected or otherwise incompatible requests cannot execute it.
 | `GET` | `/requests/{request_id}/messages` | Retrieve conversation history |
 | `GET` | `/requests/{request_id}/events` | Retrieve audit history |
 | `POST` | `/requests/{request_id}/reply` | Save a customer reply and reanalyse |
+| `POST` | `/webhook/quote-request/{request_id}/reply` | Save a reply from the owning inbound channel |
 | `POST` | `/requests/{request_id}/approve` | Approve a reviewed request |
 | `POST` | `/requests/{request_id}/reject` | Reject an active request |
 | `POST` | `/requests/{request_id}/tools/{tool_name}` | Execute an allowed tool |
@@ -177,7 +178,7 @@ Rejected or otherwise incompatible requests cannot execute it.
 Interactive API documentation is available at:
 
 ```text
-http://SERVER_ADDRESS:8000/docs
+http://localhost:8000/docs
 ```
 
 ## Quick start
@@ -207,7 +208,7 @@ Expected response:
 {
   "status": "running",
   "service": "agent-server",
-  "version": "3.2.0"
+  "version": "3.3.0"
 }
 ```
 
@@ -240,10 +241,14 @@ python3 tests/smoke_phase3.py
 The test verifies service health, missing-information detection, controlled follow-up drafting, conversational reanalysis, persistence, audit events, safety escalation, human approval and invalid-transition protection.
 
 The smoke test creates test records in PostgreSQL and makes live model calls.
+Export `AGENT_INBOUND_API_KEY` and `AGENT_OPERATOR_API_KEY` in the shell running
+the smoke test. The operator value must match an entry in the server's
+`AGENT_OPERATOR_CREDENTIALS` with all five permissions; the server does not
+read `AGENT_OPERATOR_API_KEY`.
 
 ## Phase 4 skill smoke test
 
-After deploying version 3.2.0, run:
+After deploying version 3.3.0, run:
 
 ```bash
 python3 tests/smoke_phase4.py
@@ -257,7 +262,27 @@ two test records and makes two live model calls.
 
 Never commit `.env` or real API credentials.
 
-The current implementation is intended for local development and controlled testing. Before public exposure, add API and webhook authentication, HTTPS, authorisation, rate limiting, request-size limits, production monitoring and secret rotation.
+Phase 4B requires separate `X-API-Key` credentials. The inbound key can create
+requests at `/webhook/quote-request` only for the configured
+`AGENT_INBOUND_SOURCE` and submit replies only for requests owned by that
+source. Individual operator keys grant `read`, `analyze`, `reply`, `decide`
+and/or `tools` permissions. The health and service-catalogue endpoints are
+public. Decision, tool and reply events identify the authenticated operator
+instead of trusting a name supplied in the request body. See
+[Installation Guide](docs/INSTALLATION.md)
+for key setup and [Phase 4B slices](docs/PHASE4B-SECURITY.md) for the remaining
+security work.
+
+Denied access is recorded in the container log using fixed event codes and
+route templates, without request bodies or credentials. Model and tool failures
+return generic details; tool drafts are not duplicated in the request audit
+history.
+
+These security slices are intended for controlled testing. The Compose API
+port binds to the Mac Mini's loopback interface. For access from another
+computer, use an SSH tunnel as described in the
+[Phase 4B deployment guide](docs/PHASE4B-DEPLOYMENT.md). An external webhook
+requires a separately configured private TLS ingress and request controls.
 
 ## Development history
 
