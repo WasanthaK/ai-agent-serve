@@ -1,4 +1,5 @@
 import json
+import logging
 import unittest
 from uuid import UUID
 
@@ -8,6 +9,7 @@ from fastapi.testclient import TestClient
 from observability import (
     StructuredRequestLoggingMiddleware,
     correlation_exception_handler,
+    request_logger,
 )
 
 
@@ -29,6 +31,16 @@ class ObservabilityTests(unittest.TestCase):
         return TestClient(
             app,
             raise_server_exceptions=raise_server_exceptions,
+        )
+
+    def test_request_logger_is_configured_for_container_output(self):
+        self.assertTrue(request_logger.isEnabledFor(logging.INFO))
+        self.assertFalse(request_logger.propagate)
+        self.assertTrue(
+            any(
+                isinstance(handler, logging.StreamHandler)
+                for handler in request_logger.handlers
+            )
         )
 
     def test_response_has_server_generated_correlation_id_and_json_log(self):

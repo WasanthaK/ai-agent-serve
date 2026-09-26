@@ -10,6 +10,13 @@ from starlette.responses import PlainTextResponse
 
 
 request_logger = logging.getLogger("agent.requests")
+request_logger.setLevel(logging.INFO)
+if not request_logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(message)s"))
+    request_logger.addHandler(_handler)
+request_logger.propagate = False
+
 _correlation_id = ContextVar("agent_correlation_id", default=None)
 
 
