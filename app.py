@@ -22,6 +22,10 @@ from agent_skills import (
     service_catalog,
     skill_registry,
 )
+from observability import (
+    StructuredRequestLoggingMiddleware,
+    correlation_exception_handler,
+)
 from tools import ToolExecutionError, execute_tool
 from security import (
     OperatorPrincipal,
@@ -35,6 +39,8 @@ app = FastAPI(
     title="Mac Mini Agent Server",
     version="3.3.0",
 )
+app.add_middleware(StructuredRequestLoggingMiddleware)
+app.add_exception_handler(Exception, correlation_exception_handler)
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
