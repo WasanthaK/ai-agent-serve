@@ -57,8 +57,8 @@ def _apply_safety_precedence(result):
     return result
 
 
-def save_request(source, customer_name, message, result):
-    request_id = uuid.uuid4()
+def save_request(source, customer_name, message, result, request_id=None):
+    request_id = request_id or uuid.uuid4()
     _apply_safety_precedence(result)
 
     missing_information = result.get("missing_information", [])

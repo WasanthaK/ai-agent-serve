@@ -3,7 +3,7 @@ import os
 from typing import Optional
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
@@ -21,6 +21,13 @@ from agent_skills import (
     DEFAULT_ANALYSIS_SKILLS,
     service_catalog,
     skill_registry,
+)
+from idempotency import (
+    complete_webhook_delivery,
+    hash_idempotency_key,
+    hash_webhook_payload,
+    release_webhook_delivery,
+    reserve_webhook_delivery,
 )
 from observability import (
     StructuredRequestLoggingMiddleware,
@@ -115,6 +122,29 @@ Message or conversation:
         ) from None
 
 
+def _stored_analysis(saved_request):
+    return {
+        "intent": saved_request["intent"],
+        "category": saved_request["category"],
+        "summary": saved_request["summary"],
+        "urgency": saved_request["urgency"],
+        "next_action": saved_request["next_action"],
+        "needs_human_review": saved_request["needs_human_review"],
+        "missing_information": saved_request["missing_information"],
+        "follow_up_questions": saved_request["follow_up_questions"],
+    }
+
+
+def _quote_webhook_response(saved_request):
+    return {
+        "request_id": saved_request["id"],
+        "source": saved_request["source"],
+        "customer_name": saved_request["customer_name"],
+        "workflow_status": saved_request["status"],
+        "analysis": _stored_analysis(saved_request),
+    }
+
+
 @app.get("/")
 def health():
     return {
@@ -141,34 +171,106 @@ def run_agent(request: AgentRequest):
 def quote_webhook(
     request: QuoteWebhookRequest,
     http_request: Request,
+    idempotency_key: Optional[str] = Header(
+        default=None,
+        alias="Idempotency-Key",
+    ),
     source: str = Depends(require_inbound_key),
 ):
     if request.source != source:
         audit_denial(http_request, "source_mismatch", f"channel:{source}")
         raise HTTPException(status_code=403, detail="Source is not authorized")
 
-    result = analyze_quote_request(
-        message=request.message,
-        source=source,
-        customer_name=request.customer_name,
-    )
+    key_hash = None
+    reserved_request_id = None
 
-    request_id = save_request(
-        source,
-        request.customer_name,
-        request.message,
-        result,
-    )
+    if idempotency_key is not None:
+        normalized_key = idempotency_key.strip()
+        if not normalized_key or len(normalized_key) > 200:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid Idempotency-Key",
+            )
+
+        key_hash = hash_idempotency_key(normalized_key)
+        payload_hash = hash_webhook_payload(
+            source,
+            request.customer_name,
+            request.message,
+        )
+        reservation = reserve_webhook_delivery(
+            source,
+            key_hash,
+            payload_hash,
+        )
+        reserved_request_id = reservation["request_id"]
+
+        if reservation["action"] == "conflict":
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Idempotency key was already used for a different request"
+                ),
+            )
+
+        if reservation["action"] == "processing":
+            raise HTTPException(
+                status_code=409,
+                detail="Request with this idempotency key is still processing",
+                headers={"Retry-After": "2"},
+            )
+
+        if reservation["action"] == "completed":
+            saved_request = get_request(reserved_request_id)
+            if saved_request is None:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Stored idempotent request is temporarily unavailable",
+                )
+            return _quote_webhook_response(saved_request)
+
+    try:
+        result = analyze_quote_request(
+            message=request.message,
+            source=source,
+            customer_name=request.customer_name,
+        )
+    except Exception:
+        if key_hash is not None:
+            release_webhook_delivery(
+                source,
+                key_hash,
+                reserved_request_id,
+            )
+        raise
+
+    try:
+        request_id = save_request(
+            source,
+            request.customer_name,
+            request.message,
+            result,
+            request_id=reserved_request_id,
+        )
+    except Exception:
+        if key_hash is not None:
+            release_webhook_delivery(
+                source,
+                key_hash,
+                reserved_request_id,
+            )
+        raise
 
     saved_request = get_request(request_id)
 
-    return {
-        "request_id": request_id,
-        "source": source,
-        "customer_name": request.customer_name,
-        "workflow_status": saved_request["status"],
-        "analysis": result,
-    }
+    if key_hash is not None:
+        complete_webhook_delivery(
+            source,
+            key_hash,
+            request_id,
+        )
+
+    return _quote_webhook_response(saved_request)
 
 
 @app.get("/requests/{request_id}", dependencies=[Depends(require_operator_permission("read"))])

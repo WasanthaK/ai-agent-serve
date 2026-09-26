@@ -11,6 +11,7 @@ COPY db.py .
 COPY tools.py .
 COPY security.py .
 COPY observability.py .
+COPY idempotency.py .
 COPY agent_skills ./agent_skills
 
 EXPOSE 8000
