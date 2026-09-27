@@ -11,6 +11,13 @@ from dataclasses import dataclass
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader
 
+from request_controls import (
+    DEFAULT_INBOUND_RATE_LIMIT_PER_MINUTE,
+    DEFAULT_OPERATOR_RATE_LIMIT_PER_MINUTE,
+    RollingWindowRateLimiter,
+    load_rate_limit,
+)
+
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 OPERATOR_PERMISSIONS = frozenset({"read", "analyze", "reply", "decide", "tools"})
@@ -125,6 +132,28 @@ def load_inbound_source() -> str:
 
 
 _INBOUND_SOURCE = load_inbound_source()
+_INBOUND_RATE_LIMIT = load_rate_limit(
+    "AGENT_INBOUND_RATE_LIMIT_PER_MINUTE",
+    DEFAULT_INBOUND_RATE_LIMIT_PER_MINUTE,
+)
+_OPERATOR_RATE_LIMIT = load_rate_limit(
+    "AGENT_OPERATOR_RATE_LIMIT_PER_MINUTE",
+    DEFAULT_OPERATOR_RATE_LIMIT_PER_MINUTE,
+)
+_INBOUND_LIMITER = RollingWindowRateLimiter(_INBOUND_RATE_LIMIT)
+_OPERATOR_LIMITER = RollingWindowRateLimiter(_OPERATOR_RATE_LIMIT)
+
+
+def _enforce_rate_limit(request, limiter, identity):
+    retry_after = limiter.check(identity)
+    if retry_after is None:
+        return
+    audit_denial(request, "rate_limit_exceeded", identity)
+    raise HTTPException(
+        status_code=429,
+        detail="Rate limit exceeded",
+        headers={"Retry-After": str(retry_after)},
+    )
 
 
 def require_inbound_key(
@@ -135,6 +164,8 @@ def require_inbound_key(
     if not any(matches):
         audit_denial(request, "invalid_inbound_credential")
         raise HTTPException(status_code=401, detail="Invalid API credentials")
+    identity = f"channel:{_INBOUND_SOURCE}"
+    _enforce_rate_limit(request, _INBOUND_LIMITER, identity)
     return _INBOUND_SOURCE
 
 
@@ -159,6 +190,7 @@ def require_operator_permission(permission: str):
         if permission not in operator.permissions:
             audit_denial(request, "operator_permission_denied", operator.actor)
             raise HTTPException(status_code=403, detail="Operator permission denied")
+        _enforce_rate_limit(request, _OPERATOR_LIMITER, operator.actor)
         return operator
 
     return authenticate
