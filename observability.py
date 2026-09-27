@@ -8,6 +8,8 @@ from uuid import uuid4
 
 from starlette.responses import PlainTextResponse
 
+from request_controls import RequestBodyLimitMiddleware, load_max_request_bytes
+
 
 request_logger = logging.getLogger("agent.requests")
 request_logger.setLevel(logging.INFO)
@@ -17,6 +19,7 @@ if not request_logger.handlers:
     request_logger.addHandler(_handler)
 request_logger.propagate = False
 
+MAX_REQUEST_BYTES = load_max_request_bytes()
 _correlation_id = ContextVar("agent_correlation_id", default=None)
 
 
@@ -57,7 +60,7 @@ class StructuredRequestLoggingMiddleware:
     """Assign a server-owned correlation ID and log HTTP request outcomes."""
 
     def __init__(self, app):
-        self.app = app
+        self.app = RequestBodyLimitMiddleware(app, MAX_REQUEST_BYTES)
 
     async def __call__(self, scope, receive, send):
         if scope.get("type") != "http":
