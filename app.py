@@ -270,7 +270,13 @@ def quote_webhook(
             request_id,
         )
 
-    return _quote_webhook_response(saved_request)
+    return {
+        "request_id": request_id,
+        "source": source,
+        "customer_name": request.customer_name,
+        "workflow_status": saved_request["status"],
+        "analysis": result,
+    }
 
 
 @app.get("/requests/{request_id}", dependencies=[Depends(require_operator_permission("read"))])
