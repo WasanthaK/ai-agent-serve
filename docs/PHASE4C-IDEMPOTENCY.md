@@ -59,8 +59,32 @@ curl -X POST http://localhost:8000/webhook/quote-request \
 Repeating the same call with the same idempotency key and payload returns the
 same `request_id` without another model call.
 
+## Retry-safe startup recovery
+
+The current Docker deployment runs a single agent process. Before Uvicorn
+starts, the container runs `recover_idempotency.py` and reconciles any
+reservations left in `processing` by an interrupted process or host restart.
+
+PostgreSQL commit state is the source of truth:
+
+- If the reserved `request_id` already exists in `agent_requests`, the
+  reservation is marked `completed`. A later retry therefore replays the
+  committed request without another model call or insert.
+- If no matching request row exists, the reservation is deleted. A later
+  delivery with the same idempotency key can then acquire a fresh reservation
+  and process normally.
+
+Recovery runs before inbound traffic is accepted. If reconciliation fails,
+the startup command does not launch Uvicorn, so the container cannot become
+healthy with unresolved retry state.
+
+The recovery log contains aggregate counts only (`completed` and `released`)
+and does not include raw keys, hashes, payloads, sources or request IDs.
+
 ## Current boundary
 
-This slice prevents duplicate processing for normal retries and concurrent
-duplicate delivery. Recovery of reservations left in `processing` by a hard
-process or host crash belongs to the next Phase 4C retry-safety slice.
+This startup reconciliation is correct for the current single-agent Docker
+Compose deployment. If the service is later scaled to multiple concurrently
+running agent instances, reservation ownership will need a lease or equivalent
+distributed coordination mechanism before this startup recovery strategy can
+be reused unchanged.

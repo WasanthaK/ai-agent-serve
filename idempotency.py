@@ -2,11 +2,21 @@
 
 import hashlib
 import json
+import logging
 import uuid
 
 from psycopg.rows import dict_row
 
 from db import get_connection
+
+
+recovery_logger = logging.getLogger("agent.idempotency")
+recovery_logger.setLevel(logging.INFO)
+if not recovery_logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(message)s"))
+    recovery_logger.addHandler(_handler)
+recovery_logger.propagate = False
 
 
 def hash_idempotency_key(value):
@@ -117,3 +127,58 @@ def release_webhook_delivery(source, key_hash, request_id):
                 """,
                 (source, key_hash, request_id),
             )
+
+
+def recover_incomplete_webhook_deliveries():
+    """Reconcile reservations left in processing by an interrupted agent.
+
+    This is intended to run once during single-agent application startup,
+    before inbound requests are accepted. PostgreSQL commit state is the source
+    of truth: a reservation whose request row exists is completed; otherwise
+    the reservation is released so the delivery can be retried.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE webhook_idempotency AS wi
+                SET state = 'completed',
+                    updated_at = NOW()
+                WHERE wi.state = 'processing'
+                  AND EXISTS (
+                      SELECT 1
+                      FROM agent_requests AS ar
+                      WHERE ar.id = wi.request_id
+                  )
+                """
+            )
+            completed = cur.rowcount
+
+            cur.execute(
+                """
+                DELETE FROM webhook_idempotency AS wi
+                WHERE wi.state = 'processing'
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM agent_requests AS ar
+                      WHERE ar.id = wi.request_id
+                  )
+                """
+            )
+            released = cur.rowcount
+
+    result = {
+        "completed": completed,
+        "released": released,
+    }
+    recovery_logger.info(
+        json.dumps(
+            {
+                "event": "idempotency_recovery_completed",
+                **result,
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
+    return result
