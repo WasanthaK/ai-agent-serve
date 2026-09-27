@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from observability import (
     StructuredRequestLoggingMiddleware,
     correlation_exception_handler,
+    get_correlation_id,
     request_logger,
 )
 
@@ -23,6 +24,10 @@ class ObservabilityTests(unittest.TestCase):
         async def probe(request: Request):
             await request.body()
             return {"ok": True}
+
+        @app.get("/context")
+        async def context():
+            return {"correlation_id": get_correlation_id()}
 
         @app.get("/explode")
         async def explode():
@@ -70,6 +75,21 @@ class ObservabilityTests(unittest.TestCase):
         self.assertNotIn(secret, rendered)
         self.assertNotIn("must-not-log", rendered)
         self.assertNotIn("X-API-Key", rendered)
+
+    def test_request_context_uses_server_id_not_client_supplied_header(self):
+        client = self.make_client()
+        client_value = "11111111-1111-1111-1111-111111111111"
+
+        response = client.get(
+            "/context",
+            headers={"X-Correlation-ID": client_value},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        response_id = response.headers["X-Correlation-ID"]
+        UUID(response_id)
+        self.assertNotEqual(response_id, client_value)
+        self.assertEqual(response.json()["correlation_id"], response_id)
 
     def test_failure_response_and_log_share_correlation_id_without_message(self):
         client = self.make_client(raise_server_exceptions=False)

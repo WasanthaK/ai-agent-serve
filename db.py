@@ -6,6 +6,8 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from observability import get_correlation_id
+
 
 def get_connection():
     return psycopg.connect(
@@ -25,6 +27,7 @@ def _record_event(
     details=None,
 ):
     event_id = uuid.uuid4()
+    correlation_id = get_correlation_id()
 
     cursor.execute(
         """
@@ -33,9 +36,10 @@ def _record_event(
             request_id,
             event_type,
             actor,
-            details
+            details,
+            correlation_id
         )
-        VALUES (%s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s)
         """,
         (
             event_id,
@@ -43,6 +47,7 @@ def _record_event(
             event_type,
             actor,
             Jsonb(details or {}),
+            correlation_id,
         ),
     )
 
@@ -59,6 +64,7 @@ def _apply_safety_precedence(result):
 
 def save_request(source, customer_name, message, result, request_id=None):
     request_id = request_id or uuid.uuid4()
+    correlation_id = get_correlation_id()
     _apply_safety_precedence(result)
 
     missing_information = result.get("missing_information", [])
@@ -88,12 +94,13 @@ def save_request(source, customer_name, message, result, request_id=None):
                     needs_human_review,
                     status,
                     missing_information,
-                    follow_up_questions
+                    follow_up_questions,
+                    correlation_id
                 )
                 VALUES (
                     %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s,
-                    %s, %s, %s
+                    %s, %s, %s, %s
                 )
                 """,
                 (
@@ -110,6 +117,7 @@ def save_request(source, customer_name, message, result, request_id=None):
                     status,
                     Jsonb(missing_information),
                     Jsonb(follow_up_questions),
+                    correlation_id,
                 ),
             )
 
@@ -155,6 +163,7 @@ def get_request_events(request_id):
                     event_type,
                     actor,
                     details,
+                    correlation_id,
                     created_at
                 FROM agent_events
                 WHERE request_id = %s
@@ -265,6 +274,7 @@ def save_message(
     actor=None,
 ):
     message_id = uuid.uuid4()
+    correlation_id = get_correlation_id()
 
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
@@ -276,9 +286,10 @@ def save_message(
                     role,
                     channel,
                     message,
-                    metadata
+                    metadata,
+                    correlation_id
                 )
-                VALUES (%s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING *
                 """,
                 (
@@ -288,6 +299,7 @@ def save_message(
                     channel,
                     message,
                     Jsonb(metadata or {}),
+                    correlation_id,
                 ),
             )
 
@@ -319,6 +331,7 @@ def get_request_messages(request_id):
                     channel,
                     message,
                     metadata,
+                    correlation_id,
                     created_at
                 FROM agent_messages
                 WHERE request_id = %s
