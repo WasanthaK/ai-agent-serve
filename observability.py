@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from starlette.responses import PlainTextResponse
 
+from operational_metrics import operational_metrics
 from request_controls import RequestBodyLimitMiddleware, load_max_request_bytes
 
 
@@ -57,7 +58,7 @@ async def correlation_exception_handler(request, exc):
 
 
 class StructuredRequestLoggingMiddleware:
-    """Assign a server-owned correlation ID and log HTTP request outcomes."""
+    """Assign a server-owned correlation ID and record privacy-safe outcomes."""
 
     def __init__(self, app):
         self.app = RequestBodyLimitMiddleware(app, MAX_REQUEST_BYTES)
@@ -88,22 +89,35 @@ class StructuredRequestLoggingMiddleware:
             await self.app(scope, receive, send_with_correlation)
         except Exception as exc:
             duration_ms = round((time.perf_counter() - started) * 1000, 2)
+            route = _route_template(scope)
+            operational_metrics.record_exception(
+                scope.get("method"),
+                route,
+                duration_ms,
+            )
             _log(
                 "request_failed",
                 correlation_id=correlation_id,
                 method=scope.get("method"),
-                route=_route_template(scope),
+                route=route,
                 duration_ms=duration_ms,
                 error_type=type(exc).__name__,
             )
             raise
         else:
             duration_ms = round((time.perf_counter() - started) * 1000, 2)
+            route = _route_template(scope)
+            operational_metrics.record_completed(
+                scope.get("method"),
+                route,
+                status_code,
+                duration_ms,
+            )
             _log(
                 "request_completed",
                 correlation_id=correlation_id,
                 method=scope.get("method"),
-                route=_route_template(scope),
+                route=route,
                 status_code=status_code,
                 duration_ms=duration_ms,
             )
