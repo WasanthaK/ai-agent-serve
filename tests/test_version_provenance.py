@@ -1,6 +1,9 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import patch
+from uuid import uuid4
 
+import app as api
 import db
 from agent_skills import DEFAULT_ANALYSIS_SKILLS, skill_registry
 from tools import get_tool_version
@@ -105,6 +108,34 @@ class VersionProvenanceTests(unittest.TestCase):
 
         details = record.call_args.kwargs["details"]
         self.assertEqual(details["skill_versions"], versions)
+
+    def test_tool_lifecycle_events_record_tool_version(self):
+        request_id = uuid4()
+        request = {
+            "id": request_id,
+            "status": "needs_information",
+        }
+        operator = SimpleNamespace(actor="operator:test")
+
+        with patch.object(api, "get_request", return_value=request), \
+             patch.object(
+                 api,
+                 "execute_tool",
+                 return_value={"delivery_status": "draft_only"},
+             ), \
+             patch.object(api, "record_event") as record:
+            api.run_request_tool(
+                request_id,
+                "prepare_customer_follow_up",
+                operator,
+            )
+
+        self.assertEqual(record.call_count, 2)
+        for call in record.call_args_list:
+            self.assertEqual(
+                call.kwargs["details"]["tool_version"],
+                "1.0.0",
+            )
 
 
 if __name__ == "__main__":
