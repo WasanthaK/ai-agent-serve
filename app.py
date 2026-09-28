@@ -33,6 +33,7 @@ from observability import (
     StructuredRequestLoggingMiddleware,
     correlation_exception_handler,
 )
+from operational_metrics import operational_metrics
 from tools import ToolExecutionError, execute_tool
 from security import (
     OperatorPrincipal,
@@ -157,6 +158,14 @@ def health():
 @app.get("/service-catalog")
 def retrieve_service_catalog():
     return service_catalog.as_dict()
+
+
+@app.get(
+    "/metrics/operational",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_operational_metrics():
+    return operational_metrics.snapshot()
 
 
 @app.post("/agent", dependencies=[Depends(require_operator_permission("analyze"))])
