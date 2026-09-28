@@ -99,22 +99,22 @@ def analyze_quote_request(
     try:
         response = operational_metrics.measure_model_call(
             lambda: client.responses.create(
-            model="gpt-5.6",
-            instructions=QUOTE_ANALYSIS_INSTRUCTIONS,
-            input=f"""
+                model="gpt-5.6",
+                instructions=QUOTE_ANALYSIS_INSTRUCTIONS,
+                input=f"""
 Source: {source}
 Customer: {customer_name or "Unknown"}
 Message or conversation:
 {message}
 """,
-            text={
-                "format": {
-                    "type": "json_schema",
-                    "name": "quote_request",
-                    "strict": True,
-                    "schema": QUOTE_ANALYSIS_SCHEMA,
-                }
-            },
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": "quote_request",
+                        "strict": True,
+                        "schema": QUOTE_ANALYSIS_SCHEMA,
+                    }
+                },
             )
         )
         return json.loads(response.output_text)
