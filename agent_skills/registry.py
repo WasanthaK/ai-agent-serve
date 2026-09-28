@@ -23,6 +23,12 @@ class SkillRegistry:
     def names(self):
         return tuple(self._skills)
 
+    def versions(self, skill_names):
+        return {
+            name: self.get(name).version
+            for name in skill_names
+        }
+
     def build_instructions(self, skill_names):
         sections = []
 

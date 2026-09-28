@@ -62,7 +62,14 @@ def _apply_safety_precedence(result):
     return result
 
 
-def save_request(source, customer_name, message, result, request_id=None):
+def save_request(
+    source,
+    customer_name,
+    message,
+    result,
+    request_id=None,
+    skill_versions=None,
+):
     request_id = request_id or uuid.uuid4()
     correlation_id = get_correlation_id()
     _apply_safety_precedence(result)
@@ -121,17 +128,21 @@ def save_request(source, customer_name, message, result, request_id=None):
                 ),
             )
 
+            details = {
+                "source": source,
+                "status": status,
+                "needs_human_review": result["needs_human_review"],
+                "missing_information_count": len(missing_information),
+            }
+            if skill_versions:
+                details["skill_versions"] = dict(skill_versions)
+
             _record_event(
                 cur,
                 request_id=request_id,
                 event_type="request_created",
                 actor="agent",
-                details={
-                    "source": source,
-                    "status": status,
-                    "needs_human_review": result["needs_human_review"],
-                    "missing_information_count": len(missing_information),
-                },
+                details=details,
             )
 
     return request_id
@@ -347,6 +358,7 @@ def update_request_analysis(
     request_id,
     result,
     actor="agent",
+    skill_versions=None,
 ):
     _apply_safety_precedence(result)
 
@@ -409,17 +421,21 @@ def update_request_analysis(
 
             updated_request = cur.fetchone()
 
+            details = {
+                "previous_status": existing["status"],
+                "new_status": new_status,
+                "needs_human_review": result["needs_human_review"],
+                "missing_information_count": len(missing_information),
+            }
+            if skill_versions:
+                details["skill_versions"] = dict(skill_versions)
+
             _record_event(
                 cur,
                 request_id=request_id,
                 event_type="request_reanalysed",
                 actor=actor,
-                details={
-                    "previous_status": existing["status"],
-                    "new_status": new_status,
-                    "needs_human_review": result["needs_human_review"],
-                    "missing_information_count": len(missing_information),
-                },
+                details=details,
             )
 
             return updated_request

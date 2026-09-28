@@ -34,7 +34,7 @@ from observability import (
     correlation_exception_handler,
 )
 from operational_metrics import operational_metrics
-from tools import ToolExecutionError, execute_tool
+from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
     audit_denial,
@@ -89,6 +89,10 @@ QUOTE_ANALYSIS_SCHEMA = skill_registry.build_json_schema(
 QUOTE_ANALYSIS_INSTRUCTIONS = skill_registry.build_instructions(
     DEFAULT_ANALYSIS_SKILLS
 ) + "\n\n" + service_catalog.build_analysis_instructions()
+
+ANALYSIS_SKILL_VERSIONS = skill_registry.versions(
+    DEFAULT_ANALYSIS_SKILLS
+)
 
 
 def analyze_quote_request(
@@ -262,6 +266,7 @@ def quote_webhook(
             request.message,
             result,
             request_id=reserved_request_id,
+            skill_versions=ANALYSIS_SKILL_VERSIONS,
         )
     except Exception:
         if key_hash is not None:
@@ -433,6 +438,7 @@ def _process_customer_reply(request_id, reply, request, channel, actor):
     updated_request = update_request_analysis(
         request_id=request_id,
         result=result,
+        skill_versions=ANALYSIS_SKILL_VERSIONS,
     )
 
     return {
@@ -556,12 +562,15 @@ def run_request_tool(
             ),
         )
 
+    tool_version = get_tool_version(tool_name)
+
     record_event(
         request_id=request_id,
         event_type="tool_started",
         actor=operator.actor,
         details={
             "tool": tool_name,
+            "tool_version": tool_version,
         },
     )
 
@@ -577,6 +586,7 @@ def run_request_tool(
             actor=operator.actor,
             details={
                 "tool": tool_name,
+                "tool_version": tool_version,
                 "error_type": type(exc).__name__,
             },
         )
@@ -592,6 +602,7 @@ def run_request_tool(
         actor=operator.actor,
         details={
             "tool": tool_name,
+            "tool_version": tool_version,
         },
     )
 
