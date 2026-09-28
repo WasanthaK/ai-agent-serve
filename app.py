@@ -8,6 +8,7 @@ from openai import OpenAI
 from pydantic import BaseModel, Field
 
 from db import (
+    database_ready,
     get_request,
     get_request_events,
     get_request_messages,
@@ -158,6 +159,31 @@ def health():
         "status": "running",
         "service": "agent-server",
         "version": "3.3.0",
+    }
+
+
+@app.get("/health/live")
+def health_live():
+    return {
+        "status": "alive",
+        "service": "agent-server",
+    }
+
+
+@app.get("/health/ready")
+def health_ready():
+    if not database_ready():
+        raise HTTPException(
+            status_code=503,
+            detail="Service is not ready",
+        )
+
+    return {
+        "status": "ready",
+        "service": "agent-server",
+        "dependencies": {
+            "database": "ready",
+        },
     }
 
 

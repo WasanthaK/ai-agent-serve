@@ -19,6 +19,23 @@ def get_connection():
     )
 
 
+def database_ready():
+    try:
+        with psycopg.connect(
+            host=os.getenv("POSTGRES_HOST"),
+            port=os.getenv("POSTGRES_PORT"),
+            dbname=os.getenv("POSTGRES_DB"),
+            user=os.getenv("POSTGRES_USER"),
+            password=os.getenv("POSTGRES_PASSWORD"),
+            connect_timeout=2,
+        ) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                return cur.fetchone()[0] == 1
+    except Exception:
+        return False
+
+
 def _record_event(
     cursor,
     request_id,
