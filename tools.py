@@ -1,5 +1,15 @@
+from dataclasses import dataclass
+from typing import Callable
+
+
 class ToolExecutionError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class RegisteredTool:
+    version: str
+    handler: Callable
 
 
 def prepare_customer_follow_up(request):
@@ -42,8 +52,22 @@ def prepare_customer_follow_up(request):
 
 
 TOOL_REGISTRY = {
-    "prepare_customer_follow_up": prepare_customer_follow_up,
+    "prepare_customer_follow_up": RegisteredTool(
+        version="1.0.0",
+        handler=prepare_customer_follow_up,
+    ),
 }
+
+
+def get_tool_version(tool_name):
+    tool = TOOL_REGISTRY.get(tool_name)
+
+    if tool is None:
+        raise ToolExecutionError(
+            f"Tool is not registered: {tool_name}"
+        )
+
+    return tool.version
 
 
 def execute_tool(tool_name, request):
@@ -54,4 +78,4 @@ def execute_tool(tool_name, request):
             f"Tool is not registered: {tool_name}"
         )
 
-    return tool(request)
+    return tool.handler(request)
