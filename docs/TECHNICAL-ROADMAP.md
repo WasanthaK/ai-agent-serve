@@ -102,9 +102,9 @@ Extract the current hardcoded request-analysis behaviour into initial skills:
 
 Current Phase 4C progress:
 
-- Items 1–7 are complete and live.
-- Item 8, skill-version and tool-version recording, is implemented and has passed the full 81-test suite on `phase-4c/version-provenance`; merge and live verification remain before it is considered complete.
-- Item 9, health and readiness checks, is next after item 8 is merged and live-verified.
+- Items 1–8 are complete and live.
+- Item 9, health and readiness checks, is implemented on `phase-4c/health-readiness` and has passed the full 84-test suite; merge and live verification remain before it is considered complete.
+- Item 10, automated unit and integration tests, is next after item 9 is merged and live-verified.
 
 ### Phase 4D — Channel-neutral request inbox
 
