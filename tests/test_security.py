@@ -337,8 +337,13 @@ class RouteAuthorizationTests(unittest.TestCase):
                 f"/requests/{self.request_id}/tools/prepare_customer_follow_up",
                 headers={"X-API-Key": OPERATOR_KEY})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(record.call_args.kwargs["details"],
-            {"tool": "prepare_customer_follow_up"})
+        self.assertEqual(
+            record.call_args.kwargs["details"],
+            {
+                "tool": "prepare_customer_follow_up",
+                "tool_version": "1.0.0",
+            },
+        )
 
         with patch.object(api, "get_request", return_value={"status": "needs_information"}), \
              patch.object(api, "execute_tool", side_effect=ToolExecutionError("private-token-marker")), \
