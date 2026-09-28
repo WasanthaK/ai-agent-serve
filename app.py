@@ -97,7 +97,8 @@ def analyze_quote_request(
     customer_name=None,
 ):
     try:
-        response = client.responses.create(
+        response = operational_metrics.measure_model_call(
+            lambda: client.responses.create(
             model="gpt-5.6",
             instructions=QUOTE_ANALYSIS_INSTRUCTIONS,
             input=f"""
@@ -114,6 +115,7 @@ Message or conversation:
                     "schema": QUOTE_ANALYSIS_SCHEMA,
                 }
             },
+            )
         )
         return json.loads(response.output_text)
     except Exception:
