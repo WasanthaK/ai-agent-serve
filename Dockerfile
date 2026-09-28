@@ -11,6 +11,7 @@ COPY db.py .
 COPY tools.py .
 COPY security.py .
 COPY observability.py .
+COPY operational_metrics.py .
 COPY request_controls.py .
 COPY idempotency.py .
 COPY recover_idempotency.py .
