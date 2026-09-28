@@ -100,6 +100,12 @@ Extract the current hardcoded request-analysis behaviour into initial skills:
 - Health and readiness checks
 - Automated unit and integration tests
 
+Current Phase 4C progress:
+
+- Items 1–7 are complete and live.
+- Item 8, skill-version and tool-version recording, is implemented and has passed the full 81-test suite on `phase-4c/version-provenance`; merge and live verification remain before it is considered complete.
+- Item 9, health and readiness checks, is next after item 8 is merged and live-verified.
+
 ### Phase 4D — Channel-neutral request inbox
 
 Create a normalized inbound-message contract so all channels enter the same workflow.
