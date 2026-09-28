@@ -106,6 +106,24 @@ class ModelCallMetricsTests(unittest.TestCase):
             "Request analysis is temporarily unavailable",
         )
 
+    def test_invalid_json_is_provider_success_but_analysis_failure(self):
+        metrics = OperationalMetrics()
+        response = SimpleNamespace(output_text="not-valid-json")
+
+        with patch.object(api, "operational_metrics", metrics), patch.object(
+            api.client.responses,
+            "create",
+            return_value=response,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                api.analyze_quote_request("Replace a tap")
+
+        self.assertEqual(raised.exception.status_code, 502)
+        model = metrics.snapshot()["model_calls"]
+        self.assertEqual(model["calls_total"], 1)
+        self.assertEqual(model["successes_total"], 1)
+        self.assertEqual(model["failures_total"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
