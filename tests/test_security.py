@@ -354,7 +354,9 @@ class RouteAuthorizationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["detail"], "Tool could not be executed")
         self.assertEqual(record.call_args.kwargs["details"], {
-            "tool": "prepare_customer_follow_up", "error_type": "ToolExecutionError",
+            "tool": "prepare_customer_follow_up",
+            "tool_version": "1.0.0",
+            "error_type": "ToolExecutionError",
         })
 
     def test_model_errors_have_generic_response(self):
