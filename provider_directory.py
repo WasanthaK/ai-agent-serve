@@ -1,10 +1,11 @@
 """Deterministic provider-directory persistence for Phase 5.
 
-This module stores provider identity, approval state, and explicit service
-capabilities. It does not perform routing, coverage matching, onboarding, or
-approval authorization.
+This module stores provider identity, approval state, explicit service
+capabilities, and explicit coverage areas. It does not perform routing,
+proximity matching, onboarding, or approval authorization.
 """
 
+import re
 import uuid
 
 from psycopg.rows import dict_row
@@ -19,6 +20,8 @@ APPROVAL_STATUSES = frozenset({
     "suspended",
     "rejected",
 })
+
+AREA_KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,119}$")
 
 
 class ProviderDirectoryValidationError(ValueError):
@@ -63,6 +66,24 @@ def validate_service_slug(value: str) -> str:
         ) from exc
 
     return normalized
+
+
+def validate_area_key(value: str) -> str:
+    """Validate a deterministic externally-defined coverage-area identifier.
+
+    The key is intentionally opaque to this module. It does not geocode, infer
+    hierarchy, calculate distance, or rewrite location meaning.
+    """
+
+    if not isinstance(value, str):
+        raise ProviderDirectoryValidationError("Coverage area key must be text")
+
+    if not AREA_KEY_PATTERN.fullmatch(value):
+        raise ProviderDirectoryValidationError(
+            "Coverage area key must be a canonical lowercase identifier"
+        )
+
+    return value
 
 
 def create_provider(
@@ -217,5 +238,87 @@ def list_approved_providers_for_service(service_slug: str):
                 ORDER BY p.created_at ASC, p.id ASC
                 """,
                 (service_slug,),
+            )
+            return cur.fetchall()
+
+
+def add_provider_coverage_area(provider_id, area_key: str):
+    """Assign one exact canonical coverage-area key to an existing provider."""
+
+    area_key = validate_area_key(area_key)
+
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                INSERT INTO provider_coverage_areas (
+                    provider_id,
+                    area_key
+                )
+                VALUES (%s, %s)
+                ON CONFLICT (provider_id, area_key) DO NOTHING
+                RETURNING provider_id, area_key, created_at
+                """,
+                (provider_id, area_key),
+            )
+            created = cur.fetchone()
+            if created is not None:
+                return created
+
+            cur.execute(
+                """
+                SELECT provider_id, area_key, created_at
+                FROM provider_coverage_areas
+                WHERE provider_id = %s AND area_key = %s
+                """,
+                (provider_id, area_key),
+            )
+            return cur.fetchone()
+
+
+def list_provider_coverage_areas(provider_id):
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT provider_id, area_key, created_at
+                FROM provider_coverage_areas
+                WHERE provider_id = %s
+                ORDER BY area_key ASC
+                """,
+                (provider_id,),
+            )
+            return cur.fetchall()
+
+
+def list_approved_providers_for_service_and_area(
+    service_slug: str,
+    area_key: str,
+):
+    """Return approved providers with exact service and exact area eligibility.
+
+    This is a deterministic eligibility query only. It does not rank or select a
+    provider and it does not infer geographic equivalence or proximity.
+    """
+
+    service_slug = validate_service_slug(service_slug)
+    area_key = validate_area_key(area_key)
+
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT p.*
+                FROM providers AS p
+                INNER JOIN provider_service_capabilities AS c
+                    ON c.provider_id = p.id
+                INNER JOIN provider_coverage_areas AS a
+                    ON a.provider_id = p.id
+                WHERE p.approval_status = 'approved'
+                  AND c.service_slug = %s
+                  AND a.area_key = %s
+                ORDER BY p.created_at ASC, p.id ASC
+                """,
+                (service_slug, area_key),
             )
             return cur.fetchall()
