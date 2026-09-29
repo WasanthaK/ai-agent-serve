@@ -100,11 +100,20 @@ Extract the current hardcoded request-analysis behaviour into initial skills:
 - Health and readiness checks
 - Automated unit and integration tests
 
-Current Phase 4C progress:
+Phase 4C is complete and live-verified.
 
-- Items 1–8 are complete and live.
-- Item 9, health and readiness checks, is implemented on `phase-4c/health-readiness` and has passed the full 84-test suite; merge and live verification remain before it is considered complete.
-- Item 10, automated unit and integration tests, is next after item 9 is merged and live-verified.
+Completed proof includes:
+
+- production structured logging and correlation persistence
+- webhook idempotency and retry-safe startup recovery
+- request-size and authenticated rate controls
+- protected operational and model-call metrics
+- persisted skill and tool version provenance
+- public liveness and database-backed readiness checks
+- automated GitHub Actions unit testing
+- PostgreSQL 16 fresh-database integration testing
+- full migration-chain bootstrap and idempotency verification
+- real persistence round-trip validation against a clean database
 
 ### Phase 4D — Channel-neutral request inbox
 
