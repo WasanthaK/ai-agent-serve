@@ -22,6 +22,10 @@ from request_controls import (
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 OPERATOR_PERMISSIONS = frozenset({"read", "analyze", "reply", "decide", "tools"})
 security_logger = logging.getLogger("agent.security")
+WEBSITE_INBOUND_ROUTES = frozenset({
+    "/webhook/quote-request",
+    "/webhook/quote-request/{request_id}/reply",
+})
 
 
 def audit_denial(request: Request, reason: str, actor: str | None = None) -> None:
@@ -273,10 +277,20 @@ def _authenticate_inbound(request: Request, key: str | None) -> str:
     return source
 
 
+def _enforce_bound_route_channel(request: Request, source: str) -> None:
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", None)
+    if route_path in WEBSITE_INBOUND_ROUTES and source != "website":
+        audit_denial(request, "inbound_channel_denied", f"channel:{source}")
+        raise HTTPException(status_code=403, detail="Channel is not authorized")
+
+
 def require_inbound_key(
     request: Request, key: str | None = Depends(api_key_header)
 ) -> str:
-    return _authenticate_inbound(request, key)
+    source = _authenticate_inbound(request, key)
+    _enforce_bound_route_channel(request, source)
+    return source
 
 
 def require_inbound_channel(source: str):
