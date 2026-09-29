@@ -2,15 +2,15 @@
 
 ## Purpose
 
-The Phase 5 provider directory is a deterministic source of provider identity, approval state and explicit service capabilities.
+The Phase 5 provider directory is a deterministic source of provider identity, approval state, explicit service capabilities and explicit coverage areas.
 
-This stage establishes the minimum persisted facts required before routing can exist. It does not yet implement coverage areas, availability, compliance evidence, provider onboarding, routing, RFQs, quote collection, or quote evaluation.
+These are eligibility facts only. This stage does not rank, select or route providers and does not yet implement availability, compliance evidence, provider onboarding, RFQs, quote collection or quote evaluation.
 
 ## Authority boundary
 
 Provider approval is application state, not model output.
 
-A language model may later recommend providers or explain why a provider appears suitable, but it must never create, approve, suspend, reject, or otherwise mutate provider authority by itself.
+A language model may later recommend providers or explain why a provider appears suitable, but it must never create, approve, suspend, reject or otherwise mutate provider authority by itself.
 
 The persistence layer accepts only these explicit approval states:
 
@@ -21,7 +21,7 @@ The persistence layer accepts only these explicit approval states:
 
 Only records whose persisted state is exactly `approved` are returned by approved-provider queries.
 
-Service capability assignment is also deterministic persisted state. A capability means only that the provider has been explicitly associated with a canonical service category; it is not a routing score, endorsement or selection decision.
+Service capability and coverage-area assignment are also deterministic persisted facts. Neither is a routing score, endorsement, ranking or provider-selection decision.
 
 This stage intentionally exposes no HTTP provider-management write endpoint. Authorization and audited lifecycle transitions will be added separately before provider-management mutations become available through the application.
 
@@ -43,23 +43,32 @@ Display names are trimmed, must not be blank, and are limited to 200 characters.
 
 Capability slugs must exist in `agent_skills/service_catalog.py`; the provider directory does not maintain a parallel service taxonomy.
 
-Examples include:
-
-- `plumbing`
-- `electrical`
-- `hvac`
-- `cleaning`
-- `mechanic`
-- `catering`
-
 Duplicate provider/service assignments are idempotent.
 
-An approved-provider lookup for a service requires both:
+An approved-provider lookup for a service requires both persisted `approved` state and an explicit matching service capability.
 
-1. provider `approval_status = 'approved'`; and
-2. an explicit matching service capability assignment.
+## Coverage areas
 
-A pending, suspended or rejected provider is not eligible for the approved service directory merely because it has a capability row.
+`provider_coverage_areas` associates a provider with one or more canonical `area_key` values.
+
+Area keys are stable lowercase identifiers supplied by deterministic application configuration. Examples:
+
+- `bn:brunei-muara`
+- `au:nsw:sydney`
+- `postcode:2000`
+- `zone:north-1`
+
+The provider directory treats an area key as opaque. It does not geocode addresses, infer administrative hierarchy, expand nearby areas, calculate distance or rewrite geographic meaning.
+
+Duplicate provider/area assignments are idempotent.
+
+The exact service-and-area eligibility query requires all three persisted facts:
+
+1. provider `approval_status = 'approved'`;
+2. the requested canonical service capability; and
+3. the exact requested coverage-area key.
+
+The result is an eligible set only. It does not rank or select a provider.
 
 ## Persistence contract
 
@@ -72,22 +81,23 @@ A pending, suspended or rejected provider is not eligible for the approved servi
 - `add_provider_service_capability(...)`
 - `list_provider_service_capabilities(...)`
 - `list_approved_providers_for_service(...)`
+- `add_provider_coverage_area(...)`
+- `list_provider_coverage_areas(...)`
+- `list_approved_providers_for_service_and_area(...)`
 
 Input validation happens before database access.
-
-The module does not perform routing, ranking, coverage matching or infer whether a provider is suitable for a specific customer request.
 
 ## Current exclusions
 
 This foundation does not yet include:
 
-- coverage areas
 - availability indicators
 - compliance records
 - approval transition APIs
-- capability-management APIs
+- provider-management HTTP mutation APIs
 - invitation or onboarding
-- matching or ranking
+- proximity/fuzzy/hierarchical area matching
+- provider ranking or selection
 - RFQ delivery
 - quotation ingestion or evaluation
 
@@ -95,12 +105,6 @@ Those remain later Phase 5 slices.
 
 ## Verification
 
-The PostgreSQL integration suite proves:
-
-- provider identity and approval-state persistence;
-- approved-only directory filtering;
-- canonical service-capability assignment;
-- idempotent duplicate capability assignment; and
-- approved-provider lookup by service excludes pending providers and unrelated capabilities.
+The PostgreSQL integration suite proves provider identity and approval-state persistence, canonical service capabilities, exact coverage-area assignment, idempotent duplicate assignments, and approved-provider filtering by exact service plus exact area.
 
 The migrations are also exercised by the existing fresh-database bootstrap and migration-idempotency checks.
