@@ -177,22 +177,26 @@ Completed:
 - service capabilities use only canonical slugs from `agent_skills/service_catalog.py`
 - duplicate provider/service assignments are idempotent
 - approved-provider service lookup requires both persisted `approved` state and explicit capability assignment
+- provider coverage areas implemented and CI-verified in PR #30
+- coverage uses explicit canonical lowercase area keys with exact matching only
+- duplicate provider/area assignments are idempotent
+- approved-provider area eligibility requires persisted approval, exact service capability and exact area assignment
 
 Current bounded work:
 
-- add explicit provider coverage-area assignments using canonical lowercase area keys
-- treat area keys as opaque deterministic identifiers; do not geocode, infer hierarchy, calculate distance or perform fuzzy matching
-- make duplicate provider/area assignment idempotent
-- expose approved-provider eligibility by exact service capability plus exact area key
-- require persisted `approved` state, explicit service capability and explicit area assignment
-- do not rank or select providers and do not add availability, provider-management HTTP mutations or onboarding in this slice
+- add explicit provider availability indicators with only `unknown`, `available`, `unavailable`
+- treat missing or `unknown` availability as not available
+- persist one current availability indicator per provider
+- expose available-provider eligibility by exact service capability plus exact area key
+- require persisted `approved` state, explicit service capability, explicit area assignment and `availability_status = 'available'`
+- do not add calendars, time windows, capacity scoring, ranking, routing, provider-management HTTP mutations or onboarding in this slice
 
 Provider management roadmap:
 
 - Approved-provider directory — foundation complete
 - Service capabilities — complete
-- Coverage areas — in progress
-- Availability indicators
+- Coverage areas — complete
+- Availability indicators — in progress
 - Compliance and approval status
 - Provider invitation and onboarding
 

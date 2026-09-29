@@ -15,11 +15,14 @@ from provider_directory import (
     add_provider_service_capability,
     create_provider,
     get_provider,
+    get_provider_availability,
     list_approved_providers,
     list_approved_providers_for_service,
     list_approved_providers_for_service_and_area,
+    list_available_approved_providers_for_service_and_area,
     list_provider_coverage_areas,
     list_provider_service_capabilities,
+    set_provider_availability,
 )
 
 
@@ -305,6 +308,51 @@ class DatabaseIntegrationTests(unittest.TestCase):
                             approved_other_area_id,
                             pending_local_id,
                         ),
+                    )
+
+    def test_provider_availability_fails_closed_for_unknown_and_unavailable(self):
+        available_id = uuid4()
+        unavailable_id = uuid4()
+        unknown_id = uuid4()
+        missing_id = uuid4()
+
+        provider_specs = (
+            (available_id, "CI Available Plumber"),
+            (unavailable_id, "CI Unavailable Plumber"),
+            (unknown_id, "CI Unknown Plumber"),
+            (missing_id, "CI Missing Availability Plumber"),
+        )
+
+        for provider_id, name in provider_specs:
+            create_provider(name, approval_status="approved", provider_id=provider_id)
+            add_provider_service_capability(provider_id, "plumbing")
+            add_provider_coverage_area(provider_id, "bn:brunei-muara")
+
+        try:
+            available = set_provider_availability(available_id, "available")
+            set_provider_availability(unavailable_id, "unavailable")
+            set_provider_availability(unknown_id, "unknown")
+
+            self.assertEqual(available["availability_status"], "available")
+            stored = get_provider_availability(available_id)
+            self.assertEqual(stored["availability_status"], "available")
+            self.assertIsNone(get_provider_availability(missing_id))
+
+            matching = list_available_approved_providers_for_service_and_area(
+                "plumbing",
+                "bn:brunei-muara",
+            )
+            matching_ids = {provider["id"] for provider in matching}
+            self.assertIn(available_id, matching_ids)
+            self.assertNotIn(unavailable_id, matching_ids)
+            self.assertNotIn(unknown_id, matching_ids)
+            self.assertNotIn(missing_id, matching_ids)
+        finally:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM providers WHERE id IN (%s, %s, %s, %s)",
+                        (available_id, unavailable_id, unknown_id, missing_id),
                     )
 
 
