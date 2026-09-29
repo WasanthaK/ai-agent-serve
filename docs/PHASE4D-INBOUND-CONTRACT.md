@@ -6,7 +6,7 @@ Phase 4D introduces a normalized inbound-message contract so website, email, Wha
 
 The contract is proven on the existing website quote-request webhook while preserving that route's public request/response shape and its established authentication, source-binding, idempotency and workflow controls.
 
-A provider-neutral email adapter contract is also defined, but email ingress is not live yet. Durable email-envelope persistence must be added before a public email route is exposed.
+A provider-neutral email adapter contract is also defined. The current slice adds durable normalized-envelope persistence, but email ingress is still not live until a provider-specific verified route is implemented and proven.
 
 ## Trust boundary
 
@@ -100,21 +100,33 @@ Subject: <subject>
 
 The adapter preserves sender identity, external message/thread identifiers, occurrence time and attachment references in the normalized message.
 
-The adapter does not authenticate Gmail, Microsoft Graph or any other provider webhook. Provider-specific verification remains outside this contract.
+The adapter does not authenticate SendGrid, Gmail, Microsoft Graph or any other provider webhook. Provider-specific verification remains outside this contract.
 
-## Why email ingress is not live yet
+## Durable inbound-envelope persistence
 
-The current request persistence model stores source, customer name and message text, but it does not yet durably preserve the full normalized email envelope.
+Normalized inbound messages are stored in `inbound_messages` before downstream AI processing.
 
-Exposing a public email route before that persistence exists would risk discarding:
+The durable record preserves:
 
-- sender address/display name
+- schema version
+- authenticated channel
+- normalized message text
+- sender envelope
 - external message identifier
-- external conversation/thread identifier
+- external conversation identifier
 - occurrence timestamp
 - attachment references
+- optional linked internal request ID
+- correlation ID
+- deterministic payload hash
 
-Those fields are needed for reliable deduplication, reply routing and future channel-specific conversation handling.
+For messages with an `external_message_id`, `(channel, external_message_id)` is unique.
+
+An exact retry of the same normalized envelope returns the existing stored record. Reuse of the same external message identity with different normalized content fails closed as a conflict.
+
+Linking an inbound record to an internal request is also deterministic: linking the same record to the same request is idempotent, while an attempt to relink it to a different request fails closed.
+
+This storage layer does not itself invoke a model, choose workflow authority or trust provider input. It only persists a normalized message that has already crossed the channel-authentication boundary.
 
 ## Deliberate exclusions
 
@@ -131,4 +143,4 @@ Those responsibilities remain outside the channel-neutral message model.
 
 ## Next Phase 4D step
 
-Add durable persistence for the normalized inbound envelope, including the email identifiers and attachment references required for retry-safe ingress and future replies. Only after that persistence is proven should a live email ingress route be added.
+After this persistence slice is merged and PostgreSQL integration-tested, implement the first provider-specific verified email ingress. SendGrid is the preferred first provider: verify its inbound signature before parsing/normalization, persist the normalized envelope before AI analysis, and keep delivery retry-safe. Do not configure public DNS, MX records or external webhook delivery until the route is implemented and explicitly authorized for live setup.

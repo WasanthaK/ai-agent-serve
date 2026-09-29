@@ -126,19 +126,24 @@ Completed slices:
 - existing website `POST /webhook/quote-request` internally translated into the normalized contract while preserving its external API, source authentication/mismatch checks, idempotency identity, persistence semantics and response shape
 - website adapter CI verification completed successfully in PR #21
 - channel-bound inbound credentials added and CI-verified in PR #22, while preserving the legacy single-channel deployment path
-- provider-neutral `EmailInboundEnvelope` and email normalization contract defined with strict sender/message/thread/timestamp/attachment handling
+- provider-neutral `EmailInboundEnvelope` and email normalization contract defined and CI-verified in PR #23 with strict sender/message/thread/timestamp/attachment handling
+- durable `inbound_messages` persistence added for normalized envelopes
+- exact provider retries are idempotent by `(channel, external_message_id)` and conflicting reuse fails closed
+- normalized sender, message/thread identifiers, occurrence timestamp, attachments, correlation ID and optional request linkage are preserved
+- inbound-to-request linking is one-way/idempotent and refuses relinking to a different request
 
 Current bounded prerequisite:
 
-- durably persist the normalized inbound envelope before exposing live email ingress
-- preserve email sender identity, external message/thread identifiers, occurrence timestamp and attachment references
-- make persistence retry-safe and suitable for future reply routing
-- do not expose a public email route until this envelope storage is proven
+- CI-verify the fresh PostgreSQL migration chain and inbound-envelope round trips for this persistence slice
+- after persistence merges, implement the first provider-specific verified email ingress
+- SendGrid is the preferred first provider
+- verify provider authenticity before parsing/normalization, persist before AI analysis, and keep delivery retry-safe
+- do not configure public DNS, MX records or live SendGrid webhook delivery without explicit authorization immediately before that external change
 
 Initial adapters:
 
 - Website webhook — implemented and CI-verified
-- Email — normalization contract implemented; durable envelope persistence is next
+- Email — normalization contract implemented; durable persistence implemented, CI verification pending
 - WhatsApp
 
 Later adapters:
