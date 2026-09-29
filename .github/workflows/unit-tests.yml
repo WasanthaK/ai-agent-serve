@@ -100,5 +100,7 @@ jobs:
             psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f "$migration"
           done
 
-      - name: Run PostgreSQL persistence integration test
-        run: PYTHONPATH=. python tests/integration_database.py -q
+      - name: Run PostgreSQL persistence integration tests
+        run: |
+          PYTHONPATH=. python tests/integration_database.py -q
+          PYTHONPATH=. python tests/integration_provider_onboarding.py -q
