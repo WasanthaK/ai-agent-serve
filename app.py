@@ -30,6 +30,7 @@ from idempotency import (
     release_webhook_delivery,
     reserve_webhook_delivery,
 )
+from inbound_adapters import normalize_website_message
 from observability import (
     StructuredRequestLoggingMiddleware,
     correlation_exception_handler,
@@ -222,6 +223,11 @@ def quote_webhook(
         audit_denial(http_request, "source_mismatch", f"channel:{source}")
         raise HTTPException(status_code=403, detail="Source is not authorized")
 
+    inbound_message = normalize_website_message(
+        authenticated_channel=source,
+        text=request.message,
+    )
+
     key_hash = None
     reserved_request_id = None
 
@@ -235,12 +241,12 @@ def quote_webhook(
 
         key_hash = hash_idempotency_key(normalized_key)
         payload_hash = hash_webhook_payload(
-            source,
+            inbound_message.channel,
             request.customer_name,
-            request.message,
+            inbound_message.text,
         )
         reservation = reserve_webhook_delivery(
-            source,
+            inbound_message.channel,
             key_hash,
             payload_hash,
         )
@@ -272,14 +278,14 @@ def quote_webhook(
 
     try:
         result = analyze_quote_request(
-            message=request.message,
-            source=source,
+            message=inbound_message.text,
+            source=inbound_message.channel,
             customer_name=request.customer_name,
         )
     except Exception:
         if key_hash is not None:
             release_webhook_delivery(
-                source,
+                inbound_message.channel,
                 key_hash,
                 reserved_request_id,
             )
@@ -287,9 +293,9 @@ def quote_webhook(
 
     try:
         request_id = save_request(
-            source,
+            inbound_message.channel,
             request.customer_name,
-            request.message,
+            inbound_message.text,
             result,
             request_id=reserved_request_id,
             skill_versions=ANALYSIS_SKILL_VERSIONS,
@@ -297,7 +303,7 @@ def quote_webhook(
     except Exception:
         if key_hash is not None:
             release_webhook_delivery(
-                source,
+                inbound_message.channel,
                 key_hash,
                 reserved_request_id,
             )
@@ -307,14 +313,14 @@ def quote_webhook(
 
     if key_hash is not None:
         complete_webhook_delivery(
-            source,
+            inbound_message.channel,
             key_hash,
             request_id,
         )
 
     return {
         "request_id": request_id,
-        "source": source,
+        "source": inbound_message.channel,
         "customer_name": request.customer_name,
         "workflow_status": saved_request["status"],
         "analysis": result,
