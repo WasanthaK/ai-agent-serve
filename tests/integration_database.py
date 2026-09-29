@@ -11,9 +11,12 @@ from inbound_persistence import (
     save_inbound_message,
 )
 from provider_directory import (
+    add_provider_service_capability,
     create_provider,
     get_provider,
     list_approved_providers,
+    list_approved_providers_for_service,
+    list_provider_service_capabilities,
 )
 
 
@@ -184,6 +187,56 @@ class DatabaseIntegrationTests(unittest.TestCase):
                     cur.execute(
                         "DELETE FROM providers WHERE id IN (%s, %s)",
                         (approved_id, pending_id),
+                    )
+
+    def test_provider_service_capability_uses_canonical_slug_and_approval_filter(self):
+        approved_id = uuid4()
+        pending_id = uuid4()
+        unrelated_id = uuid4()
+
+        create_provider(
+            "CI Approved Plumber",
+            approval_status="approved",
+            provider_id=approved_id,
+        )
+        create_provider(
+            "CI Pending Plumber",
+            approval_status="pending",
+            provider_id=pending_id,
+        )
+        create_provider(
+            "CI Approved Electrician",
+            approval_status="approved",
+            provider_id=unrelated_id,
+        )
+
+        try:
+            first = add_provider_service_capability(approved_id, "plumbing")
+            duplicate = add_provider_service_capability(approved_id, "plumbing")
+            add_provider_service_capability(pending_id, "plumbing")
+            add_provider_service_capability(unrelated_id, "electrical")
+
+            self.assertEqual(first["provider_id"], approved_id)
+            self.assertEqual(first["service_slug"], "plumbing")
+            self.assertEqual(duplicate["provider_id"], approved_id)
+
+            capabilities = list_provider_service_capabilities(approved_id)
+            self.assertEqual(
+                [capability["service_slug"] for capability in capabilities],
+                ["plumbing"],
+            )
+
+            matching = list_approved_providers_for_service("plumbing")
+            matching_ids = {provider["id"] for provider in matching}
+            self.assertIn(approved_id, matching_ids)
+            self.assertNotIn(pending_id, matching_ids)
+            self.assertNotIn(unrelated_id, matching_ids)
+        finally:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM providers WHERE id IN (%s, %s, %s)",
+                        (approved_id, pending_id, unrelated_id),
                     )
 
 
