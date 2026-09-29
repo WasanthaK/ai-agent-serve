@@ -4,3 +4,5 @@ uvicorn
 openai
 python-dotenv
 psycopg[binary]
+cryptography>=46.0.4,<47
+python-multipart>=0.0.9,<0.1
