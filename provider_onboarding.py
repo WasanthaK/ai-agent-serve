@@ -131,10 +131,13 @@ def accept_provider_invitation(secret: str):
     """Accept a non-expired pending invitation and start onboarding.
 
     Repeating acceptance with the same already-accepted secret is idempotent.
-    Expired or revoked invitations fail closed.
+    Expired or revoked invitations fail closed. Expiry is committed before an
+    expired-invitation error is raised so a replacement invite is not blocked.
     """
 
     token_hash = _hash_invitation_secret(secret)
+    invalid_reason = None
+    onboarding = None
 
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
@@ -165,10 +168,10 @@ def accept_provider_invitation(secret: str):
                     (token_hash,),
                 )
                 invitation = cur.fetchone()
-                if invitation is None:
-                    raise ProviderInvitationInvalidError("Invitation is invalid")
 
-                if invitation["invitation_status"] == "accepted":
+                if invitation is None:
+                    invalid_reason = "Invitation is invalid"
+                elif invitation["invitation_status"] == "accepted":
                     pass
                 elif (
                     invitation["invitation_status"] == "pending"
@@ -182,29 +185,33 @@ def accept_provider_invitation(secret: str):
                         """,
                         (invitation["id"],),
                     )
-                    raise ProviderInvitationInvalidError("Invitation has expired")
+                    invalid_reason = "Invitation has expired"
                 else:
-                    raise ProviderInvitationInvalidError("Invitation is not active")
+                    invalid_reason = "Invitation is not active"
 
-            cur.execute(
-                """
-                INSERT INTO provider_onboarding (provider_id, onboarding_status)
-                VALUES (%s, 'in_progress')
-                ON CONFLICT (provider_id) DO UPDATE
-                SET onboarding_status = 'in_progress', updated_at = NOW()
-                WHERE provider_onboarding.onboarding_status = 'not_started'
-                """,
-                (invitation["provider_id"],),
-            )
-            cur.execute(
-                """
-                SELECT provider_id, onboarding_status, updated_at
-                FROM provider_onboarding
-                WHERE provider_id = %s
-                """,
-                (invitation["provider_id"],),
-            )
-            onboarding = cur.fetchone()
+            if invalid_reason is None:
+                cur.execute(
+                    """
+                    INSERT INTO provider_onboarding (provider_id, onboarding_status)
+                    VALUES (%s, 'in_progress')
+                    ON CONFLICT (provider_id) DO UPDATE
+                    SET onboarding_status = 'in_progress', updated_at = NOW()
+                    WHERE provider_onboarding.onboarding_status = 'not_started'
+                    """,
+                    (invitation["provider_id"],),
+                )
+                cur.execute(
+                    """
+                    SELECT provider_id, onboarding_status, updated_at
+                    FROM provider_onboarding
+                    WHERE provider_id = %s
+                    """,
+                    (invitation["provider_id"],),
+                )
+                onboarding = cur.fetchone()
+
+    if invalid_reason is not None:
+        raise ProviderInvitationInvalidError(invalid_reason)
 
     return {"invitation": invitation, "onboarding": onboarding}
 
