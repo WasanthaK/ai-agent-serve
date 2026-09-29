@@ -124,11 +124,19 @@ Completed slices:
 - strict `NormalizedInboundMessage` contract with sender and attachment envelope types
 - documented trust boundary: adapters authenticate/bind source; normalized payload carries data, not authority
 - existing website `POST /webhook/quote-request` internally translated into the normalized contract while preserving its external API, source authentication/mismatch checks, idempotency identity, persistence semantics and response shape
+- website adapter CI verification completed successfully in PR #21
+
+Current prerequisite slice:
+
+- bind inbound credentials to explicit channels before adding another adapter
+- preserve the existing single-channel `AGENT_INBOUND_API_KEY` + `AGENT_INBOUND_SOURCE` deployment contract during migration
+- add `AGENT_INBOUND_CREDENTIALS` for multiple channel-specific credentials
+- ensure credentials for one channel cannot call another channel's inbound route
 
 Initial adapters:
 
-- Website webhook — implemented; CI verification pending for the adapter slice
-- Email — next bounded adapter after website CI/merge
+- Website webhook — implemented and CI-verified
+- Email — next bounded adapter after channel-bound authentication merges
 - WhatsApp
 
 Later adapters:
