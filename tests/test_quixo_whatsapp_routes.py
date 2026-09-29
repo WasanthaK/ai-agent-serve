@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from quixo_whatsapp_routes import build_quixo_whatsapp_router
@@ -98,9 +98,9 @@ class QuixoWhatsAppRouteTests(unittest.TestCase):
         self.assertEqual(calls[2], ("save_request", request_id))
         link_mock.assert_called_once_with(request_id, request_id)
 
-    def test_wrong_channel_dependency_is_rejected_by_normalizer(self):
-        def wrong_channel():
-            return "email"
+    def test_authentication_denial_happens_before_persistence(self):
+        def denied_channel():
+            raise HTTPException(status_code=403, detail="Channel is not authorized")
 
         app = FastAPI()
         app.include_router(
@@ -109,7 +109,7 @@ class QuixoWhatsAppRouteTests(unittest.TestCase):
                 save_request=lambda *args, **kwargs: None,
                 get_request=lambda request_id: None,
                 skill_versions={},
-                channel_dependency=wrong_channel,
+                channel_dependency=denied_channel,
             )
         )
 
@@ -120,12 +120,12 @@ class QuixoWhatsAppRouteTests(unittest.TestCase):
         }
 
         with patch("quixo_whatsapp_routes.save_inbound_message") as persist_mock:
-            response = TestClient(app, raise_server_exceptions=False).post(
+            response = TestClient(app).post(
                 "/webhook/whatsapp/inbound",
                 json=payload,
             )
 
-        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 403)
         persist_mock.assert_not_called()
 
 
