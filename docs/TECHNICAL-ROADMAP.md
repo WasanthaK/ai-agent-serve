@@ -133,21 +133,29 @@ Completed slices:
 - inbound-to-request linking is one-way/idempotent and refuses relinking to a different request
 - verified SendGrid inbound email ingress implemented and CI-verified in PR #25
 - SendGrid ingress verifies provider authenticity before parsing, persists before AI analysis and uses deterministic request identity for retry recovery
+- provider-neutral WhatsApp envelope and trusted Quixo Messaging -> Agent ingress implemented and CI-verified in PR #26
+- the existing Quixo Azure messaging service remains the public Twilio webhook boundary; the Mac Mini is not exposed directly to Twilio
+- WhatsApp forwarding requires a credential explicitly bound to the `whatsapp` channel, persists before AI and uses deterministic request identity for retry recovery
 
 Current bounded work:
 
-- keep live SendGrid DNS/MX/public webhook enablement deliberately deferred until the software work is complete and explicit authorization is given immediately before external changes
-- add the provider-neutral WhatsApp envelope and normalization contract
-- use the existing Quixo Azure messaging service as the public Twilio webhook boundary; do not replace its production/development Twilio webhook with a Mac Mini URL
-- have Quixo Messaging forward trusted WhatsApp events to the agent through a credential explicitly bound to the `whatsapp` channel
-- persist forwarded WhatsApp messages before AI analysis and keep retries idempotent
-- keep Twilio sender/webhook reconfiguration and live end-to-end external proof deferred until explicitly authorized
+- close the remaining website durability gap so the normalized website message is written to `inbound_messages` before AI analysis
+- preserve the existing website API, idempotency response semantics and request IDs
+- use only a hash of a validated `Idempotency-Key` as the optional website external message identity; never store the raw idempotency key in `inbound_messages`
+- CI-prove persistence-before-AI, durable request linkage and completed-retry backfill
+
+Phase 4D software completion boundary:
+
+- after the website durability slice is CI-verified and merged, the software path for the three initial adapters is complete
+- live SendGrid DNS/MX/public webhook enablement remains deliberately deferred
+- live Twilio/Quixo WhatsApp end-to-end proof remains deliberately deferred
+- no DNS, MX, public endpoint, Twilio sender/webhook, Azure messaging, firewall, tunnel or port-forwarding changes without explicit authorization immediately before the action
 
 Initial adapters:
 
-- Website webhook — implemented and CI-verified
+- Website webhook — normalization and authentication implemented; final durable pre-AI persistence slice in progress
 - Email — SendGrid software path implemented and CI-verified; live external enablement deferred
-- WhatsApp — Quixo Messaging -> Agent software path in progress; Twilio remains upstream of the existing Quixo messaging service
+- WhatsApp — Quixo Messaging -> Agent software path implemented and CI-verified; Twilio remains upstream of the existing Quixo messaging service
 
 Later adapters:
 
