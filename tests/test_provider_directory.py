@@ -167,6 +167,28 @@ class ProviderDirectoryContractTests(unittest.TestCase):
                     )
                 connect.assert_not_called()
 
+    def test_only_explicit_compliance_states_are_accepted(self):
+        for status in ("unknown", "compliant", "non_compliant"):
+            with self.subTest(status=status):
+                self.assertEqual(
+                    provider_directory.validate_compliance_status(status),
+                    status,
+                )
+
+        for status in ("valid", "COMPLIANT", "expired", "", None):
+            with self.subTest(status=status):
+                with self.assertRaises(ProviderDirectoryValidationError):
+                    provider_directory.validate_compliance_status(status)
+
+    def test_invalid_compliance_fails_before_database_access(self):
+        with patch.object(provider_directory, "get_connection") as connect:
+            with self.assertRaises(ProviderDirectoryValidationError):
+                provider_directory.set_provider_compliance(
+                    "provider-id",
+                    "expired",
+                )
+            connect.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
