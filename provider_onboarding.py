@@ -70,8 +70,9 @@ def validate_onboarding_status(status: str) -> str:
 def create_provider_invitation(provider_id, expires_at: datetime):
     """Create one pending invitation and return its secret exactly once.
 
-    The raw secret is never persisted. Callers must treat the returned secret as
-    sensitive and must not place it in logs, events, or analytics.
+    Stale pending invitations for the provider are marked expired first. The raw
+    secret is never persisted. Callers must treat the returned secret as sensitive
+    and must not place it in logs, events, or analytics.
     """
 
     expires_at = _validate_expires_at(expires_at)
@@ -82,6 +83,16 @@ def create_provider_invitation(provider_id, expires_at: datetime):
     try:
         with get_connection() as conn:
             with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(
+                    """
+                    UPDATE provider_invitations
+                    SET invitation_status = 'expired', updated_at = NOW()
+                    WHERE provider_id = %s
+                      AND invitation_status = 'pending'
+                      AND expires_at <= NOW()
+                    """,
+                    (provider_id,),
+                )
                 cur.execute(
                     """
                     INSERT INTO provider_invitations (
