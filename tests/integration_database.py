@@ -16,13 +16,16 @@ from provider_directory import (
     create_provider,
     get_provider,
     get_provider_availability,
+    get_provider_compliance,
     list_approved_providers,
     list_approved_providers_for_service,
     list_approved_providers_for_service_and_area,
     list_available_approved_providers_for_service_and_area,
+    list_eligible_providers_for_service_and_area,
     list_provider_coverage_areas,
     list_provider_service_capabilities,
     set_provider_availability,
+    set_provider_compliance,
 )
 
 
@@ -353,6 +356,52 @@ class DatabaseIntegrationTests(unittest.TestCase):
                     cur.execute(
                         "DELETE FROM providers WHERE id IN (%s, %s, %s, %s)",
                         (available_id, unavailable_id, unknown_id, missing_id),
+                    )
+
+    def test_provider_compliance_fails_closed_for_unknown_noncompliant_and_missing(self):
+        compliant_id = uuid4()
+        noncompliant_id = uuid4()
+        unknown_id = uuid4()
+        missing_id = uuid4()
+
+        provider_specs = (
+            (compliant_id, "CI Compliant Plumber"),
+            (noncompliant_id, "CI Noncompliant Plumber"),
+            (unknown_id, "CI Unknown Compliance Plumber"),
+            (missing_id, "CI Missing Compliance Plumber"),
+        )
+
+        for provider_id, name in provider_specs:
+            create_provider(name, approval_status="approved", provider_id=provider_id)
+            add_provider_service_capability(provider_id, "plumbing")
+            add_provider_coverage_area(provider_id, "bn:brunei-muara")
+            set_provider_availability(provider_id, "available")
+
+        try:
+            compliant = set_provider_compliance(compliant_id, "compliant")
+            set_provider_compliance(noncompliant_id, "non_compliant")
+            set_provider_compliance(unknown_id, "unknown")
+
+            self.assertEqual(compliant["compliance_status"], "compliant")
+            stored = get_provider_compliance(compliant_id)
+            self.assertEqual(stored["compliance_status"], "compliant")
+            self.assertIsNone(get_provider_compliance(missing_id))
+
+            matching = list_eligible_providers_for_service_and_area(
+                "plumbing",
+                "bn:brunei-muara",
+            )
+            matching_ids = {provider["id"] for provider in matching}
+            self.assertIn(compliant_id, matching_ids)
+            self.assertNotIn(noncompliant_id, matching_ids)
+            self.assertNotIn(unknown_id, matching_ids)
+            self.assertNotIn(missing_id, matching_ids)
+        finally:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM providers WHERE id IN (%s, %s, %s, %s)",
+                        (compliant_id, noncompliant_id, unknown_id, missing_id),
                     )
 
 
