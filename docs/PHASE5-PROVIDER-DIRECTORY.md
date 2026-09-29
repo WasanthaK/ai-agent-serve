@@ -2,9 +2,9 @@
 
 ## Purpose
 
-The Phase 5 provider directory is a deterministic source of provider identity, approval state, explicit service capabilities, explicit coverage areas and explicit availability indicators.
+The Phase 5 provider directory is a deterministic source of provider identity, approval state, explicit service capabilities, explicit coverage areas, explicit availability indicators and explicit compliance status.
 
-These are eligibility facts only. This stage does not rank, select or route providers and does not yet implement compliance evidence, provider onboarding, RFQs, quote collection or quote evaluation.
+These are eligibility facts only. This stage does not rank, select or route providers and does not yet implement provider onboarding, RFQs, quote collection or quote evaluation.
 
 ## Authority boundary
 
@@ -21,7 +21,7 @@ The persistence layer accepts only these explicit approval states:
 
 Only records whose persisted state is exactly `approved` are returned by approved-provider queries.
 
-Service capability, coverage-area assignment and availability are deterministic persisted facts. None is a routing score, endorsement, ranking or provider-selection decision.
+Service capability, coverage-area assignment, availability and compliance are deterministic persisted facts. None is a routing score, endorsement, ranking or provider-selection decision.
 
 This stage intentionally exposes no HTTP provider-management write endpoint. Authorization and audited lifecycle transitions will be added separately before provider-management mutations become available through the application.
 
@@ -51,24 +51,11 @@ An approved-provider lookup for a service requires both persisted `approved` sta
 
 `provider_coverage_areas` associates a provider with one or more canonical `area_key` values.
 
-Area keys are stable lowercase identifiers supplied by deterministic application configuration. Examples:
-
-- `bn:brunei-muara`
-- `au:nsw:sydney`
-- `postcode:2000`
-- `zone:north-1`
+Area keys are stable lowercase identifiers supplied by deterministic application configuration. Examples include `bn:brunei-muara`, `au:nsw:sydney`, `postcode:2000`, and `zone:north-1`.
 
 The provider directory treats an area key as opaque. It does not geocode addresses, infer administrative hierarchy, expand nearby areas, calculate distance or rewrite geographic meaning.
 
 Duplicate provider/area assignments are idempotent.
-
-The exact service-and-area eligibility query requires all three persisted facts:
-
-1. provider `approval_status = 'approved'`;
-2. the requested canonical service capability; and
-3. the exact requested coverage-area key.
-
-The result is an eligible set only. It does not rank or select a provider.
 
 ## Availability indicators
 
@@ -78,36 +65,39 @@ The result is an eligible set only. It does not rank or select a provider.
 - `available`
 - `unavailable`
 
+Missing, `unknown`, or `unavailable` availability fails closed and is excluded from the available-provider set.
+
 Availability is application-owned state. It is not inferred from messages, model output, historical behaviour or an external calendar in this slice.
 
-The available-provider eligibility query requires all four persisted facts:
+## Compliance status
+
+`provider_compliance` stores one explicit compliance status per provider:
+
+- `unknown`
+- `compliant`
+- `non_compliant`
+
+Missing, `unknown`, or `non_compliant` compliance fails closed and is excluded from the fully eligible provider set.
+
+Compliance is application-owned state. This slice does not inspect licenses, insurance documents, expiry dates, certificates or model-generated evidence. Those can be introduced later behind an audited application boundary.
+
+The fully eligible provider query requires all five persisted facts:
 
 1. provider `approval_status = 'approved'`;
-2. the requested canonical service capability;
-3. the exact requested coverage-area key; and
-4. `availability_status = 'available'`.
+2. requested canonical service capability;
+3. exact requested coverage-area key;
+4. `availability_status = 'available'`; and
+5. `compliance_status = 'compliant'`.
 
-A provider with no availability record, `unknown`, or `unavailable` fails closed and is excluded from the available set.
-
-This is still filtering only; it does not rank or select a provider and does not model appointment windows or capacity.
+The result is an eligible set only. It does not rank, select or route a provider.
 
 ## Persistence contract
 
-`provider_directory.py` provides:
+`provider_directory.py` provides provider identity, approval, capability, coverage, availability and compliance persistence/read functions, including:
 
-- `create_provider(...)`
-- `get_provider(...)`
-- `list_providers(...)`
-- `list_approved_providers()`
-- `add_provider_service_capability(...)`
-- `list_provider_service_capabilities(...)`
-- `list_approved_providers_for_service(...)`
-- `add_provider_coverage_area(...)`
-- `list_provider_coverage_areas(...)`
-- `list_approved_providers_for_service_and_area(...)`
-- `set_provider_availability(...)`
-- `get_provider_availability(...)`
-- `list_available_approved_providers_for_service_and_area(...)`
+- `set_provider_compliance(...)`
+- `get_provider_compliance(...)`
+- `list_eligible_providers_for_service_and_area(...)`
 
 Input validation happens before database access.
 
@@ -115,12 +105,12 @@ Input validation happens before database access.
 
 This foundation does not yet include:
 
-- calendar/time-window availability
-- capacity or workload scoring
-- compliance records
+- compliance evidence documents or expiry handling
 - approval transition APIs
 - provider-management HTTP mutation APIs
-- invitation or onboarding
+- provider invitation or onboarding
+- calendar/time-window availability
+- capacity or workload scoring
 - proximity/fuzzy/hierarchical area matching
 - provider ranking or selection
 - RFQ delivery
@@ -130,6 +120,6 @@ Those remain later Phase 5 slices.
 
 ## Verification
 
-The PostgreSQL integration suite proves provider identity and approval-state persistence, canonical service capabilities, exact coverage-area assignment, explicit availability state, idempotent assignments, and fail-closed approved-provider filtering by service, area and availability.
+The PostgreSQL integration suite proves provider identity and approval-state persistence, canonical service capabilities, exact coverage-area assignment, explicit availability, explicit compliance, and fail-closed eligibility filtering across all persisted facts.
 
 The migrations are also exercised by the existing fresh-database bootstrap and migration-idempotency checks.
