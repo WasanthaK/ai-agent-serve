@@ -92,16 +92,20 @@ def normalize_website_message(
     *,
     authenticated_channel: str,
     text: str,
+    external_message_id: Optional[str] = None,
 ) -> NormalizedInboundMessage:
     """Translate an authenticated website delivery into the common inbox contract.
 
     `authenticated_channel` must come from the channel authentication boundary,
-    never from an untrusted normalized payload.
+    never from an untrusted normalized payload. When the caller has a validated
+    delivery identity, it may pass a non-secret stable identifier for retry-safe
+    durable persistence.
     """
 
     return NormalizedInboundMessage(
         channel=authenticated_channel,
         text=text,
+        external_message_id=external_message_id,
     )
 
 
