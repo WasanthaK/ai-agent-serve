@@ -98,7 +98,11 @@ def validate_service_slug(value: str) -> str:
 
 
 def validate_area_key(value: str) -> str:
-    """Validate a deterministic externally-defined coverage-area identifier."""
+    """Validate a deterministic externally-defined coverage-area identifier.
+
+    The key is intentionally opaque to this module. It does not geocode, infer
+    hierarchy, calculate distance, or rewrite location meaning.
+    """
 
     if not isinstance(value, str):
         raise ProviderDirectoryValidationError("Coverage area key must be text")
@@ -117,6 +121,13 @@ def create_provider(
     approval_status: str = "pending",
     provider_id=None,
 ):
+    """Persist provider identity and current approval state.
+
+    Application-level authorization for creating or approving a provider belongs
+    outside this repository function. No model output should call this function
+    directly as an authority decision.
+    """
+
     provider_id = provider_id or uuid.uuid4()
     display_name = normalize_provider_display_name(display_name)
     approval_status = validate_approval_status(approval_status)
@@ -125,7 +136,11 @@ def create_provider(
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                INSERT INTO providers (id, display_name, approval_status)
+                INSERT INTO providers (
+                    id,
+                    display_name,
+                    approval_status
+                )
                 VALUES (%s, %s, %s)
                 RETURNING *
                 """,
@@ -137,7 +152,14 @@ def create_provider(
 def get_provider(provider_id):
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute("SELECT * FROM providers WHERE id = %s", (provider_id,))
+            cur.execute(
+                """
+                SELECT *
+                FROM providers
+                WHERE id = %s
+                """,
+                (provider_id,),
+            )
             return cur.fetchone()
 
 
@@ -148,11 +170,18 @@ def list_providers(*, approval_status=None):
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             if approval_status is None:
-                cur.execute("SELECT * FROM providers ORDER BY created_at ASC, id ASC")
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM providers
+                    ORDER BY created_at ASC, id ASC
+                    """
+                )
             else:
                 cur.execute(
                     """
-                    SELECT * FROM providers
+                    SELECT *
+                    FROM providers
                     WHERE approval_status = %s
                     ORDER BY created_at ASC, id ASC
                     """,
@@ -162,17 +191,24 @@ def list_providers(*, approval_status=None):
 
 
 def list_approved_providers():
+    """Return only providers deterministically marked approved in persisted state."""
+
     return list_providers(approval_status="approved")
 
 
 def add_provider_service_capability(provider_id, service_slug: str):
+    """Assign one canonical service capability to an existing provider."""
+
     service_slug = validate_service_slug(service_slug)
 
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                INSERT INTO provider_service_capabilities (provider_id, service_slug)
+                INSERT INTO provider_service_capabilities (
+                    provider_id,
+                    service_slug
+                )
                 VALUES (%s, %s)
                 ON CONFLICT (provider_id, service_slug) DO NOTHING
                 RETURNING provider_id, service_slug, created_at
@@ -182,6 +218,7 @@ def add_provider_service_capability(provider_id, service_slug: str):
             created = cur.fetchone()
             if created is not None:
                 return created
+
             cur.execute(
                 """
                 SELECT provider_id, service_slug, created_at
@@ -209,15 +246,20 @@ def list_provider_service_capabilities(provider_id):
 
 
 def list_approved_providers_for_service(service_slug: str):
+    """Return approved providers explicitly assigned the canonical service slug."""
+
     service_slug = validate_service_slug(service_slug)
+
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 SELECT p.*
                 FROM providers AS p
-                INNER JOIN provider_service_capabilities AS c ON c.provider_id = p.id
-                WHERE p.approval_status = 'approved' AND c.service_slug = %s
+                INNER JOIN provider_service_capabilities AS c
+                    ON c.provider_id = p.id
+                WHERE p.approval_status = 'approved'
+                  AND c.service_slug = %s
                 ORDER BY p.created_at ASC, p.id ASC
                 """,
                 (service_slug,),
@@ -226,12 +268,18 @@ def list_approved_providers_for_service(service_slug: str):
 
 
 def add_provider_coverage_area(provider_id, area_key: str):
+    """Assign one exact canonical coverage-area key to an existing provider."""
+
     area_key = validate_area_key(area_key)
+
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                INSERT INTO provider_coverage_areas (provider_id, area_key)
+                INSERT INTO provider_coverage_areas (
+                    provider_id,
+                    area_key
+                )
                 VALUES (%s, %s)
                 ON CONFLICT (provider_id, area_key) DO NOTHING
                 RETURNING provider_id, area_key, created_at
@@ -241,6 +289,7 @@ def add_provider_coverage_area(provider_id, area_key: str):
             created = cur.fetchone()
             if created is not None:
                 return created
+
             cur.execute(
                 """
                 SELECT provider_id, area_key, created_at
@@ -267,17 +316,25 @@ def list_provider_coverage_areas(provider_id):
             return cur.fetchall()
 
 
-def list_approved_providers_for_service_and_area(service_slug: str, area_key: str):
+def list_approved_providers_for_service_and_area(
+    service_slug: str,
+    area_key: str,
+):
+    """Return approved providers with exact service and exact area eligibility."""
+
     service_slug = validate_service_slug(service_slug)
     area_key = validate_area_key(area_key)
+
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 SELECT p.*
                 FROM providers AS p
-                INNER JOIN provider_service_capabilities AS c ON c.provider_id = p.id
-                INNER JOIN provider_coverage_areas AS a ON a.provider_id = p.id
+                INNER JOIN provider_service_capabilities AS c
+                    ON c.provider_id = p.id
+                INNER JOIN provider_coverage_areas AS a
+                    ON a.provider_id = p.id
                 WHERE p.approval_status = 'approved'
                   AND c.service_slug = %s
                   AND a.area_key = %s
@@ -289,12 +346,22 @@ def list_approved_providers_for_service_and_area(service_slug: str, area_key: st
 
 
 def set_provider_availability(provider_id, availability_status: str):
+    """Persist one explicit provider availability indicator.
+
+    Availability is application-owned state. This function does not infer
+    availability from messages, calendars, model output, or historical behaviour.
+    """
+
     availability_status = validate_availability_status(availability_status)
+
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                INSERT INTO provider_availability (provider_id, availability_status)
+                INSERT INTO provider_availability (
+                    provider_id,
+                    availability_status
+                )
                 VALUES (%s, %s)
                 ON CONFLICT (provider_id) DO UPDATE
                 SET availability_status = EXCLUDED.availability_status,
@@ -312,7 +379,8 @@ def get_provider_availability(provider_id):
             cur.execute(
                 """
                 SELECT provider_id, availability_status, updated_at
-                FROM provider_availability WHERE provider_id = %s
+                FROM provider_availability
+                WHERE provider_id = %s
                 """,
                 (provider_id,),
             )
@@ -320,14 +388,22 @@ def get_provider_availability(provider_id):
 
 
 def set_provider_compliance(provider_id, compliance_status: str):
-    """Persist explicit application-owned compliance status."""
+    """Persist one explicit provider compliance status.
+
+    Compliance is application-owned state. This function does not inspect or
+    infer license, insurance, certificate, expiry, or other evidence.
+    """
 
     compliance_status = validate_compliance_status(compliance_status)
+
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                INSERT INTO provider_compliance (provider_id, compliance_status)
+                INSERT INTO provider_compliance (
+                    provider_id,
+                    compliance_status
+                )
                 VALUES (%s, %s)
                 ON CONFLICT (provider_id) DO UPDATE
                 SET compliance_status = EXCLUDED.compliance_status,
@@ -345,7 +421,8 @@ def get_provider_compliance(provider_id):
             cur.execute(
                 """
                 SELECT provider_id, compliance_status, updated_at
-                FROM provider_compliance WHERE provider_id = %s
+                FROM provider_compliance
+                WHERE provider_id = %s
                 """,
                 (provider_id,),
             )
@@ -356,17 +433,27 @@ def list_available_approved_providers_for_service_and_area(
     service_slug: str,
     area_key: str,
 ):
+    """Return explicitly available providers with exact service/area eligibility.
+
+    Providers with no availability row or with `unknown`/`unavailable` status are
+    excluded. This is deterministic filtering only; it does not rank or select.
+    """
+
     service_slug = validate_service_slug(service_slug)
     area_key = validate_area_key(area_key)
+
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 SELECT p.*
                 FROM providers AS p
-                INNER JOIN provider_service_capabilities AS c ON c.provider_id = p.id
-                INNER JOIN provider_coverage_areas AS a ON a.provider_id = p.id
-                INNER JOIN provider_availability AS v ON v.provider_id = p.id
+                INNER JOIN provider_service_capabilities AS c
+                    ON c.provider_id = p.id
+                INNER JOIN provider_coverage_areas AS a
+                    ON a.provider_id = p.id
+                INNER JOIN provider_availability AS v
+                    ON v.provider_id = p.id
                 WHERE p.approval_status = 'approved'
                   AND c.service_slug = %s
                   AND a.area_key = %s
@@ -378,7 +465,10 @@ def list_available_approved_providers_for_service_and_area(
             return cur.fetchall()
 
 
-def list_eligible_providers_for_service_and_area(service_slug: str, area_key: str):
+def list_eligible_providers_for_service_and_area(
+    service_slug: str,
+    area_key: str,
+):
     """Return providers meeting every explicit Phase 5A eligibility fact.
 
     Missing/unknown compliance or availability fails closed. This function filters
@@ -387,16 +477,21 @@ def list_eligible_providers_for_service_and_area(service_slug: str, area_key: st
 
     service_slug = validate_service_slug(service_slug)
     area_key = validate_area_key(area_key)
+
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 SELECT p.*
                 FROM providers AS p
-                INNER JOIN provider_service_capabilities AS c ON c.provider_id = p.id
-                INNER JOIN provider_coverage_areas AS a ON a.provider_id = p.id
-                INNER JOIN provider_availability AS v ON v.provider_id = p.id
-                INNER JOIN provider_compliance AS k ON k.provider_id = p.id
+                INNER JOIN provider_service_capabilities AS c
+                    ON c.provider_id = p.id
+                INNER JOIN provider_coverage_areas AS a
+                    ON a.provider_id = p.id
+                INNER JOIN provider_availability AS v
+                    ON v.provider_id = p.id
+                INNER JOIN provider_compliance AS k
+                    ON k.provider_id = p.id
                 WHERE p.approval_status = 'approved'
                   AND c.service_slug = %s
                   AND a.area_key = %s
