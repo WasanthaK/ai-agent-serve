@@ -10,6 +10,11 @@ from inbound_persistence import (
     link_inbound_message_to_request,
     save_inbound_message,
 )
+from provider_directory import (
+    create_provider,
+    get_provider,
+    list_approved_providers,
+)
 
 
 ANALYSIS = {
@@ -144,6 +149,41 @@ class DatabaseIntegrationTests(unittest.TestCase):
                     cur.execute(
                         "DELETE FROM agent_requests WHERE id = %s",
                         (request_id,),
+                    )
+
+    def test_provider_directory_round_trip_and_approved_filter(self):
+        approved_id = uuid4()
+        pending_id = uuid4()
+
+        approved = create_provider(
+            "CI Approved Plumbing",
+            approval_status="approved",
+            provider_id=approved_id,
+        )
+        pending = create_provider(
+            "CI Pending Plumbing",
+            approval_status="pending",
+            provider_id=pending_id,
+        )
+
+        try:
+            self.assertEqual(approved["id"], approved_id)
+            self.assertEqual(approved["approval_status"], "approved")
+            self.assertEqual(pending["approval_status"], "pending")
+
+            stored = get_provider(approved_id)
+            self.assertEqual(stored["display_name"], "CI Approved Plumbing")
+
+            approved_directory = list_approved_providers()
+            approved_ids = {provider["id"] for provider in approved_directory}
+            self.assertIn(approved_id, approved_ids)
+            self.assertNotIn(pending_id, approved_ids)
+        finally:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM providers WHERE id IN (%s, %s)",
+                        (approved_id, pending_id),
                     )
 
 

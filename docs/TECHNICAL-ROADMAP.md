@@ -117,13 +117,13 @@ Completed proof includes:
 
 ### Phase 4D — Channel-neutral request inbox
 
-Create a normalized inbound-message contract so all channels enter the same workflow.
+Phase 4D software work is complete.
 
 Completed slices:
 
 - strict `NormalizedInboundMessage` contract with sender and attachment envelope types
 - documented trust boundary: adapters authenticate/bind source; normalized payload carries data, not authority
-- existing website `POST /webhook/quote-request` internally translated into the normalized contract while preserving its external API, source authentication/mismatch checks, idempotency identity, persistence semantics and response shape
+- existing website `POST /webhook/quote-request` internally translated into the normalized contract while preserving its external API, source authentication/mismatch checks, idempotency identity and response shape
 - website adapter CI verification completed successfully in PR #21
 - channel-bound inbound credentials added and CI-verified in PR #22, while preserving the legacy single-channel deployment path
 - provider-neutral `EmailInboundEnvelope` and email normalization contract defined and CI-verified in PR #23 with strict sender/message/thread/timestamp/attachment handling
@@ -136,26 +136,20 @@ Completed slices:
 - provider-neutral WhatsApp envelope and trusted Quixo Messaging -> Agent ingress implemented and CI-verified in PR #26
 - the existing Quixo Azure messaging service remains the public Twilio webhook boundary; the Mac Mini is not exposed directly to Twilio
 - WhatsApp forwarding requires a credential explicitly bound to the `whatsapp` channel, persists before AI and uses deterministic request identity for retry recovery
+- website normalized inbound persistence before AI, durable request linkage and completed-retry backfill implemented and CI-verified in PR #27
+- validated website `Idempotency-Key` values are represented only by SHA-256 hashes in durable inbound-message identity; raw keys are not stored there
 
-Current bounded work:
+External enablement remains deliberately separate from software completion:
 
-- close the remaining website durability gap so the normalized website message is written to `inbound_messages` before AI analysis
-- preserve the existing website API, idempotency response semantics and request IDs
-- use only a hash of a validated `Idempotency-Key` as the optional website external message identity; never store the raw idempotency key in `inbound_messages`
-- CI-prove persistence-before-AI, durable request linkage and completed-retry backfill
-
-Phase 4D software completion boundary:
-
-- after the website durability slice is CI-verified and merged, the software path for the three initial adapters is complete
-- live SendGrid DNS/MX/public webhook enablement remains deliberately deferred
-- live Twilio/Quixo WhatsApp end-to-end proof remains deliberately deferred
+- live SendGrid DNS/MX/public webhook enablement remains deferred
+- live Twilio/Quixo WhatsApp end-to-end proof remains deferred
 - no DNS, MX, public endpoint, Twilio sender/webhook, Azure messaging, firewall, tunnel or port-forwarding changes without explicit authorization immediately before the action
 
 Initial adapters:
 
-- Website webhook — normalization and authentication implemented; final durable pre-AI persistence slice in progress
-- Email — SendGrid software path implemented and CI-verified; live external enablement deferred
-- WhatsApp — Quixo Messaging -> Agent software path implemented and CI-verified; Twilio remains upstream of the existing Quixo messaging service
+- Website webhook — software path complete and CI-verified
+- Email — SendGrid software path complete and CI-verified; live external enablement deferred
+- WhatsApp — Quixo Messaging -> Agent software path complete and CI-verified; Twilio remains upstream of the existing Quixo messaging service
 
 Later adapters:
 
@@ -168,9 +162,23 @@ Channel adapters should translate messages into the common request format. They 
 
 ## Phase 5 — Provider routing and quotations
 
-### Provider management
+### Phase 5A — Provider management
 
-- Approved-provider directory
+Provider management starts with an approved-provider directory.
+
+Current bounded work:
+
+- establish durable provider identity and deterministic approval state
+- permit only explicit approval states: `pending`, `approved`, `suspended`, `rejected`
+- expose repository-level reads for all providers and approved-only providers
+- prove that only persisted `approved` records enter the approved-provider directory
+- keep provider approval as application authority, never model authority
+- do not add routing, provider-management HTTP mutation endpoints, capability matching or onboarding in this slice
+- reuse the existing service-catalogue slugs for later provider capabilities rather than creating a parallel category taxonomy
+
+Provider management roadmap:
+
+- Approved-provider directory — foundation in progress
 - Service capabilities
 - Coverage areas
 - Availability indicators
