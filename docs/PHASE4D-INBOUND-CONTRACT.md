@@ -4,9 +4,7 @@
 
 Phase 4D introduces a normalized inbound-message contract so website, email, WhatsApp and later channel adapters can feed the same downstream workflow.
 
-The contract is proven on the existing website quote-request webhook while preserving that route's public request/response shape and its established authentication, source-binding, idempotency and workflow controls.
-
-A provider-neutral email adapter contract is also defined. The current slice adds durable normalized-envelope persistence, but email ingress is still not live until a provider-specific verified route is implemented and proven.
+The common rule is that an authenticated/verified customer message is normalized and stored durably before downstream AI processing. The normalized payload is data only; it never grants authority.
 
 ## Trust boundary
 
@@ -16,9 +14,11 @@ The normalized message is created only after those adapter checks succeed.
 
 The normalized payload must not be treated as proof that a sender or channel is trusted. In particular, a raw external payload must never be allowed to choose its own authorized source merely by setting a field.
 
-For the website adapter, `require_inbound_key` remains the authority boundary. The legacy request-body `source` field is still checked against that authenticated source before normalization. The adapter receives the authenticated channel from deterministic application code; it does not trust the body to select a channel.
+For the website adapter, `require_inbound_key` remains the authority boundary. The legacy request-body `source` field is checked against that authenticated source before normalization.
 
-For future email ingress, provider-specific webhook authentication/signature validation must occur before constructing the provider-neutral email envelope. The email adapter itself only accepts a server-controlled authenticated channel and rejects non-email channels.
+For SendGrid email ingress, provider signature verification occurs before parsing and normalization.
+
+For WhatsApp, the existing Quixo Azure messaging service remains the public Twilio webhook boundary. It forwards a provider-neutral WhatsApp envelope to the agent using a credential explicitly bound to the `whatsapp` channel. The Mac Mini does not replace the existing Twilio webhook.
 
 ## Contract
 
@@ -68,14 +68,26 @@ A message is limited to 20 attachment references.
 - body `source` must still match the authenticated configured channel
 - `Idempotency-Key` handling remains unchanged
 - idempotency identity remains authenticated source + customer name + message text
-- persisted source, customer name and message retain their existing meanings
+- persisted request source, customer name and message retain their existing meanings
 - response fields remain unchanged
 
-After successful source authentication and source-match validation, deterministic adapter code constructs a `NormalizedInboundMessage` from the authenticated channel and message text. Downstream analysis, idempotency and persistence consume the normalized channel/text values.
+After successful source authentication and source-match validation, deterministic adapter code constructs a `NormalizedInboundMessage`.
 
-No website sender identifiers or attachments are invented by the adapter because the legacy webhook does not carry them.
+When a validated `Idempotency-Key` is supplied, the adapter stores only its SHA-256 hash as the normalized external message identity. The raw idempotency key is not written to `inbound_messages`.
 
-## Email adapter contract
+The website flow then:
+
+1. validates/reserves the existing webhook idempotency contract when a key is present;
+2. stores the normalized inbound message in `inbound_messages` before model analysis;
+3. performs the existing request analysis and request persistence;
+4. links the inbound record to the resulting request;
+5. completes the existing webhook idempotency reservation.
+
+Exact keyed retries reuse the same normalized inbound record. A completed retry can backfill/link the durable inbound record without repeating the model call. Unkeyed website deliveries are still accepted, but because the external sender supplied no delivery identity they cannot be deduplicated across separate HTTP deliveries.
+
+No website sender identifiers or attachments are invented because the legacy webhook does not carry them.
+
+## Email adapter
 
 `EmailInboundEnvelope` is the provider-neutral input to email normalization. It contains:
 
@@ -98,9 +110,36 @@ Subject: <subject>
 <body>
 ```
 
-The adapter preserves sender identity, external message/thread identifiers, occurrence time and attachment references in the normalized message.
+The verified SendGrid ingress checks provider authenticity before parsing, persists the normalized envelope before AI analysis and uses deterministic request identity for retry recovery.
 
-The adapter does not authenticate SendGrid, Gmail, Microsoft Graph or any other provider webhook. Provider-specific verification remains outside this contract.
+Live DNS/MX/public webhook enablement remains deliberately deferred until explicitly authorized immediately before those external changes.
+
+## WhatsApp adapter
+
+`WhatsAppInboundEnvelope` is provider-neutral and preserves:
+
+- sender external identifier
+- optional sender phone/address
+- optional display name
+- text body
+- required external message identifier
+- optional conversation identifier
+- optional timestamp
+- bounded attachment references
+
+The trusted agent route is `POST /webhook/whatsapp/inbound`.
+
+The route requires the existing channel-bound credential for `whatsapp`, stores the normalized envelope before AI analysis, reuses the durable inbound UUID as the internal request UUID, and links retries idempotently.
+
+The production topology is:
+
+```text
+WhatsApp -> Twilio -> existing Quixo Azure messaging service
+         -> authenticated Agent ingress -> inbound_messages
+         -> existing analysis/workflow
+```
+
+Twilio sender/webhook reconfiguration and live end-to-end external proof remain deliberately deferred until explicitly authorized.
 
 ## Durable inbound-envelope persistence
 
@@ -124,7 +163,7 @@ For messages with an `external_message_id`, `(channel, external_message_id)` is 
 
 An exact retry of the same normalized envelope returns the existing stored record. Reuse of the same external message identity with different normalized content fails closed as a conflict.
 
-Linking an inbound record to an internal request is also deterministic: linking the same record to the same request is idempotent, while an attempt to relink it to a different request fails closed.
+Linking an inbound record to an internal request is deterministic: linking the same record to the same request is idempotent, while an attempt to relink it to a different request fails closed.
 
 This storage layer does not itself invoke a model, choose workflow authority or trust provider input. It only persists a normalized message that has already crossed the channel-authentication boundary.
 
@@ -141,6 +180,8 @@ The normalized contract does not include:
 
 Those responsibilities remain outside the channel-neutral message model.
 
-## Next Phase 4D step
+## Phase 4D completion boundary
 
-After this persistence slice is merged and PostgreSQL integration-tested, implement the first provider-specific verified email ingress. SendGrid is the preferred first provider: verify its inbound signature before parsing/normalization, persist the normalized envelope before AI analysis, and keep delivery retry-safe. Do not configure public DNS, MX records or external webhook delivery until the route is implemented and explicitly authorized for live setup.
+The software path for the initial website, email and WhatsApp adapters is complete once the website durability slice is CI-verified and merged.
+
+Live SendGrid and Twilio/Quixo external end-to-end enablement remains a separately authorized operational proof. No DNS, MX, public endpoint, Twilio sender/webhook or Azure messaging configuration should be changed without explicit authorization immediately before that action.
