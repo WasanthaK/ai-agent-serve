@@ -56,10 +56,68 @@ def _valid_key(value: object) -> bool:
     )
 
 
-def load_credentials() -> tuple[tuple[bytes, ...], tuple[tuple[bytes, OperatorPrincipal], ...]]:
-    """Validate the full credential set before the API accepts traffic."""
+def _valid_channel(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,49}", value) is not None
+    )
+
+
+def load_inbound_source() -> str:
+    source = os.getenv("AGENT_INBOUND_SOURCE", "")
+    if not source or source != source.strip() or any(char.isspace() for char in source):
+        raise RuntimeError("AGENT_INBOUND_SOURCE must be a nonempty source without whitespace")
+    return source
+
+
+def _load_inbound_entries() -> list[tuple[str, list[str]]]:
+    configured = os.getenv("AGENT_INBOUND_CREDENTIALS", "")
     inbound_single = os.getenv("AGENT_INBOUND_API_KEY", "")
     inbound_multiple = os.getenv("AGENT_INBOUND_API_KEYS", "")
+    legacy_source = os.getenv("AGENT_INBOUND_SOURCE", "")
+
+    if configured:
+        if inbound_single or inbound_multiple or legacy_source:
+            raise RuntimeError(
+                "Configure either AGENT_INBOUND_CREDENTIALS or legacy inbound settings"
+            )
+        try:
+            entries = json.loads(configured)
+        except ValueError as exc:
+            raise RuntimeError("AGENT_INBOUND_CREDENTIALS must be a JSON array") from exc
+        if not isinstance(entries, list) or not 1 <= len(entries) <= 20:
+            raise RuntimeError(
+                "AGENT_INBOUND_CREDENTIALS must contain between one and twenty channels"
+            )
+
+        normalized = []
+        sources = set()
+        for entry in entries:
+            if (
+                not isinstance(entry, dict)
+                or set(entry) not in ({"source", "key"}, {"source", "keys"})
+            ):
+                raise RuntimeError(
+                    "Each inbound channel requires source and key or keys"
+                )
+            source = entry["source"]
+            keys = entry.get("keys", [entry.get("key")])
+            if not _valid_channel(source) or source in sources:
+                raise RuntimeError(
+                    "Inbound channel sources must be unique normalized identifiers"
+                )
+            if (
+                not isinstance(keys, list)
+                or not 1 <= len(keys) <= 2
+                or any(not _valid_key(key) for key in keys)
+            ):
+                raise RuntimeError(
+                    "Configure one or two valid keys per inbound channel"
+                )
+            sources.add(source)
+            normalized.append((source, keys))
+        return normalized
+
     if inbound_multiple:
         if inbound_single:
             raise RuntimeError("Configure either AGENT_INBOUND_API_KEY or AGENT_INBOUND_API_KEYS")
@@ -69,9 +127,23 @@ def load_credentials() -> tuple[tuple[bytes, ...], tuple[tuple[bytes, OperatorPr
             raise RuntimeError("AGENT_INBOUND_API_KEYS must be a JSON array") from exc
     else:
         inbound_keys = [inbound_single]
-    if (not isinstance(inbound_keys, list) or not 1 <= len(inbound_keys) <= 2
-            or any(not _valid_key(key) for key in inbound_keys)):
+
+    if (
+        not isinstance(inbound_keys, list)
+        or not 1 <= len(inbound_keys) <= 2
+        or any(not _valid_key(key) for key in inbound_keys)
+    ):
         raise RuntimeError("Configure one or two valid inbound API keys")
+
+    return [(load_inbound_source(), inbound_keys)]
+
+
+def load_credentials() -> tuple[
+    tuple[tuple[bytes, str], ...],
+    tuple[tuple[bytes, OperatorPrincipal], ...],
+]:
+    """Validate the full credential set before the API accepts traffic."""
+    inbound_entries = _load_inbound_entries()
 
     try:
         entries = json.loads(os.getenv("AGENT_OPERATOR_CREDENTIALS", ""))
@@ -80,33 +152,53 @@ def load_credentials() -> tuple[tuple[bytes, ...], tuple[tuple[bytes, OperatorPr
     if not isinstance(entries, list) or not entries:
         raise RuntimeError("AGENT_OPERATOR_CREDENTIALS must contain at least one operator")
 
+    inbound_credentials = []
     credentials = []
     ids = set()
     digests = []
-    for key in inbound_keys:
-        digest = _key_digest(key)
-        if any(hmac.compare_digest(digest, existing) for existing in digests):
-            raise RuntimeError("Inbound API keys must differ")
-        digests.append(digest)
-    inbound_digests = tuple(digests)
+
+    for source, keys in inbound_entries:
+        for key in keys:
+            digest = _key_digest(key)
+            if any(hmac.compare_digest(digest, existing) for existing in digests):
+                raise RuntimeError("Inbound API keys must differ")
+            digests.append(digest)
+            inbound_credentials.append((digest, source))
+
     for entry in entries:
-        if (not isinstance(entry, dict)
-                or set(entry) not in ({"id", "key", "permissions"},
-                                      {"id", "keys", "permissions"})):
+        if (
+            not isinstance(entry, dict)
+            or set(entry) not in (
+                {"id", "key", "permissions"},
+                {"id", "keys", "permissions"},
+            )
+        ):
             raise RuntimeError("Each operator requires id, key or keys, and permissions")
         operator_id = entry["id"]
         keys = entry.get("keys", [entry.get("key")])
         permissions = entry["permissions"]
-        if (not isinstance(operator_id, str)
-                or re.fullmatch(r"[a-zA-Z][a-zA-Z0-9._-]{0,63}", operator_id) is None
-                or operator_id in ids):
+        if (
+            not isinstance(operator_id, str)
+            or re.fullmatch(r"[a-zA-Z][a-zA-Z0-9._-]{0,63}", operator_id) is None
+            or operator_id in ids
+        ):
             raise RuntimeError("Operator IDs must be unique, stable identifiers")
-        if (not isinstance(keys, list) or not 1 <= len(keys) <= 2
-                or any(not _valid_key(key) for key in keys)):
+        if (
+            not isinstance(keys, list)
+            or not 1 <= len(keys) <= 2
+            or any(not _valid_key(key) for key in keys)
+        ):
             raise RuntimeError("Configure one or two valid keys per operator")
-        if (not isinstance(permissions, list) or not permissions
-                or any(not isinstance(p, str) or p not in OPERATOR_PERMISSIONS for p in permissions)
-                or len(set(permissions)) != len(permissions)):
+        if (
+            not isinstance(permissions, list)
+            or not permissions
+            or any(
+                not isinstance(permission, str)
+                or permission not in OPERATOR_PERMISSIONS
+                for permission in permissions
+            )
+            or len(set(permissions)) != len(permissions)
+        ):
             raise RuntimeError("Operator permissions must be unique known permissions")
 
         ids.add(operator_id)
@@ -118,20 +210,10 @@ def load_credentials() -> tuple[tuple[bytes, ...], tuple[tuple[bytes, OperatorPr
             digests.append(digest)
             credentials.append((digest, principal))
 
-    return inbound_digests, tuple(credentials)
+    return tuple(inbound_credentials), tuple(credentials)
 
 
-_INBOUND_DIGESTS, _OPERATORS = load_credentials()
-
-
-def load_inbound_source() -> str:
-    source = os.getenv("AGENT_INBOUND_SOURCE", "")
-    if not source or source != source.strip() or any(char.isspace() for char in source):
-        raise RuntimeError("AGENT_INBOUND_SOURCE must be a nonempty source without whitespace")
-    return source
-
-
-_INBOUND_SOURCE = load_inbound_source()
+_INBOUND_CREDENTIALS, _OPERATORS = load_credentials()
 _INBOUND_RATE_LIMIT = load_rate_limit(
     "AGENT_INBOUND_RATE_LIMIT_PER_MINUTE",
     DEFAULT_INBOUND_RATE_LIMIT_PER_MINUTE,
@@ -156,17 +238,47 @@ def _enforce_rate_limit(request, limiter, identity):
     )
 
 
+def _authenticate_inbound(request: Request, key: str | None) -> str:
+    digest = _key_digest(key) if key else None
+    source = None
+    if digest is not None:
+        for candidate_digest, candidate_source in _INBOUND_CREDENTIALS:
+            if hmac.compare_digest(digest, candidate_digest):
+                source = candidate_source
+
+    if source is None:
+        audit_denial(request, "invalid_inbound_credential")
+        raise HTTPException(status_code=401, detail="Invalid API credentials")
+
+    identity = f"channel:{source}"
+    _enforce_rate_limit(request, _INBOUND_LIMITER, identity)
+    return source
+
+
 def require_inbound_key(
     request: Request, key: str | None = Depends(api_key_header)
 ) -> str:
-    digest = _key_digest(key) if key else None
-    matches = [hmac.compare_digest(digest, candidate) for candidate in _INBOUND_DIGESTS] if digest else []
-    if not any(matches):
-        audit_denial(request, "invalid_inbound_credential")
-        raise HTTPException(status_code=401, detail="Invalid API credentials")
-    identity = f"channel:{_INBOUND_SOURCE}"
-    _enforce_rate_limit(request, _INBOUND_LIMITER, identity)
-    return _INBOUND_SOURCE
+    return _authenticate_inbound(request, key)
+
+
+def require_inbound_channel(source: str):
+    if not _valid_channel(source):
+        raise ValueError(f"Invalid inbound channel: {source}")
+
+    def authenticate(
+        request: Request, key: str | None = Depends(api_key_header)
+    ) -> str:
+        authenticated_source = _authenticate_inbound(request, key)
+        if authenticated_source != source:
+            audit_denial(
+                request,
+                "inbound_channel_denied",
+                f"channel:{authenticated_source}",
+            )
+            raise HTTPException(status_code=403, detail="Channel is not authorized")
+        return authenticated_source
+
+    return authenticate
 
 
 def require_operator_permission(permission: str):
