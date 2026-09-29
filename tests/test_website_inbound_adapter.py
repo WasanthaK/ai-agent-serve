@@ -78,10 +78,20 @@ class WebsiteInboundAdapterTests(unittest.TestCase):
         self.assertIsInstance(normalized, NormalizedInboundMessage)
         self.assertEqual(normalized.channel, "website")
         self.assertEqual(normalized.text, "My tap is leaking")
+        self.assertIsNone(normalized.external_message_id)
         self.assertIsNone(normalized.sender)
         self.assertEqual(normalized.attachments, [])
 
-    def test_source_mismatch_is_rejected_before_normalization(self):
+    def test_adapter_preserves_non_secret_delivery_identity(self):
+        normalized = normalize_website_message(
+            authenticated_channel="website",
+            text="My tap is leaking",
+            external_message_id="hashed-delivery-key",
+        )
+
+        self.assertEqual(normalized.external_message_id, "hashed-delivery-key")
+
+    def test_source_mismatch_is_rejected_before_normalization_or_persistence(self):
         request = api.QuoteWebhookRequest(
             source="email",
             customer_name="Test Customer",
@@ -90,6 +100,7 @@ class WebsiteInboundAdapterTests(unittest.TestCase):
 
         with (
             patch.object(api, "normalize_website_message") as normalize,
+            patch.object(api, "save_inbound_message") as persist,
             patch.object(api, "audit_denial") as audit,
         ):
             with self.assertRaises(HTTPException) as raised:
@@ -102,10 +113,12 @@ class WebsiteInboundAdapterTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.status_code, 403)
         normalize.assert_not_called()
+        persist.assert_not_called()
         audit.assert_called_once()
 
-    def test_webhook_downstream_path_consumes_normalized_message(self):
+    def test_webhook_persists_before_analysis_and_links_request(self):
         request_id = uuid4()
+        inbound_id = uuid4()
         request = api.QuoteWebhookRequest(
             source="website",
             customer_name="Test Customer",
@@ -116,6 +129,22 @@ class WebsiteInboundAdapterTests(unittest.TestCase):
             text="Normalized website text",
         )
         stored = saved_request(request_id, message=normalized.text)
+        calls = []
+
+        def persist(message):
+            calls.append("persist")
+            return {
+                "action": "created",
+                "message": {"id": inbound_id, "linked_request_id": None},
+            }
+
+        def analyze(**kwargs):
+            calls.append("analyze")
+            return dict(ANALYSIS)
+
+        def save(*args, **kwargs):
+            calls.append("save_request")
+            return request_id
 
         with (
             patch.object(
@@ -123,13 +152,11 @@ class WebsiteInboundAdapterTests(unittest.TestCase):
                 "normalize_website_message",
                 return_value=normalized,
             ) as normalize,
-            patch.object(
-                api,
-                "analyze_quote_request",
-                return_value=dict(ANALYSIS),
-            ) as analyze,
-            patch.object(api, "save_request", return_value=request_id) as save,
+            patch.object(api, "save_inbound_message", side_effect=persist),
+            patch.object(api, "analyze_quote_request", side_effect=analyze) as analyze_mock,
+            patch.object(api, "save_request", side_effect=save) as save_mock,
             patch.object(api, "get_request", return_value=stored),
+            patch.object(api, "link_inbound_message_to_request") as link,
         ):
             response = api.quote_webhook(
                 request,
@@ -141,15 +168,18 @@ class WebsiteInboundAdapterTests(unittest.TestCase):
         normalize.assert_called_once_with(
             authenticated_channel="website",
             text="Original website text",
+            external_message_id=None,
         )
-        analyze.assert_called_once_with(
+        self.assertEqual(calls, ["persist", "analyze", "save_request"])
+        analyze_mock.assert_called_once_with(
             message="Normalized website text",
             source="website",
             customer_name="Test Customer",
         )
-        self.assertEqual(save.call_args.args[0], "website")
-        self.assertEqual(save.call_args.args[1], "Test Customer")
-        self.assertEqual(save.call_args.args[2], "Normalized website text")
+        self.assertEqual(save_mock.call_args.args[0], "website")
+        self.assertEqual(save_mock.call_args.args[1], "Test Customer")
+        self.assertEqual(save_mock.call_args.args[2], "Normalized website text")
+        link.assert_called_once_with(inbound_id, request_id)
         self.assertEqual(response["source"], "website")
         self.assertEqual(response["customer_name"], "Test Customer")
         self.assertEqual(response["workflow_status"], "ready")
@@ -165,14 +195,20 @@ class WebsiteInboundAdapterTests(unittest.TestCase):
         normalized = NormalizedInboundMessage(
             channel="website",
             text="My tap is leaking",
+            external_message_id="key-hash",
         )
 
         with (
             patch.object(
                 api,
+                "hash_idempotency_key",
+                return_value="key-hash",
+            ),
+            patch.object(
+                api,
                 "normalize_website_message",
                 return_value=normalized,
-            ),
+            ) as normalize,
             patch.object(
                 api,
                 "hash_webhook_payload",
@@ -183,6 +219,7 @@ class WebsiteInboundAdapterTests(unittest.TestCase):
                 "reserve_webhook_delivery",
                 return_value={"action": "processing", "request_id": request_id},
             ) as reserve,
+            patch.object(api, "save_inbound_message") as persist,
         ):
             with self.assertRaises(HTTPException) as raised:
                 api.quote_webhook(
@@ -193,6 +230,11 @@ class WebsiteInboundAdapterTests(unittest.TestCase):
                 )
 
         self.assertEqual(raised.exception.status_code, 409)
+        normalize.assert_called_once_with(
+            authenticated_channel="website",
+            text="My tap is leaking",
+            external_message_id="key-hash",
+        )
         payload_hash.assert_called_once_with(
             "website",
             "Test Customer",
@@ -200,6 +242,49 @@ class WebsiteInboundAdapterTests(unittest.TestCase):
         )
         self.assertEqual(reserve.call_args.args[0], "website")
         self.assertEqual(reserve.call_args.args[2], "payload-hash")
+        persist.assert_not_called()
+
+    def test_completed_idempotent_retry_backfills_and_links_inbound_record(self):
+        request_id = uuid4()
+        inbound_id = uuid4()
+        request = api.QuoteWebhookRequest(
+            source="website",
+            customer_name="Test Customer",
+            message="My tap is leaking",
+        )
+        stored = saved_request(request_id)
+
+        with (
+            patch.object(api, "hash_idempotency_key", return_value="key-hash"),
+            patch.object(
+                api,
+                "reserve_webhook_delivery",
+                return_value={"action": "completed", "request_id": request_id},
+            ),
+            patch.object(api, "get_request", return_value=stored),
+            patch.object(
+                api,
+                "save_inbound_message",
+                return_value={
+                    "action": "created",
+                    "message": {"id": inbound_id, "linked_request_id": None},
+                },
+            ) as persist,
+            patch.object(api, "link_inbound_message_to_request") as link,
+            patch.object(api, "analyze_quote_request") as analyze,
+        ):
+            response = api.quote_webhook(
+                request,
+                http_request(),
+                idempotency_key="delivery-123",
+                source="website",
+            )
+
+        persist.assert_called_once()
+        link.assert_called_once_with(inbound_id, request_id)
+        analyze.assert_not_called()
+        self.assertEqual(response["request_id"], request_id)
+        self.assertEqual(response["workflow_status"], "ready")
 
 
 if __name__ == "__main__":
