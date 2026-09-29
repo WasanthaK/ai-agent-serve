@@ -119,10 +119,16 @@ Completed proof includes:
 
 Create a normalized inbound-message contract so all channels enter the same workflow.
 
+Completed slices:
+
+- strict `NormalizedInboundMessage` contract with sender and attachment envelope types
+- documented trust boundary: adapters authenticate/bind source; normalized payload carries data, not authority
+- existing website `POST /webhook/quote-request` internally translated into the normalized contract while preserving its external API, source authentication/mismatch checks, idempotency identity, persistence semantics and response shape
+
 Initial adapters:
 
-- Website webhook
-- Email
+- Website webhook — implemented; CI verification pending for the adapter slice
+- Email — next bounded adapter after website CI/merge
 - WhatsApp
 
 Later adapters:
