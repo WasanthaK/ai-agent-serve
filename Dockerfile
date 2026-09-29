@@ -21,6 +21,7 @@ COPY inbound_adapters.py .
 COPY inbound_persistence.py .
 COPY sendgrid_inbound.py .
 COPY sendgrid_routes.py .
+COPY quixo_whatsapp_routes.py .
 COPY agent_skills ./agent_skills
 
 EXPOSE 8000

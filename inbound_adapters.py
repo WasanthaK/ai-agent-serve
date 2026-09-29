@@ -49,6 +49,45 @@ class EmailInboundEnvelope(BaseModel):
     )
 
 
+class WhatsAppInboundEnvelope(BaseModel):
+    """Provider-neutral WhatsApp payload accepted only after channel verification."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sender_external_id: str = Field(
+        min_length=1,
+        max_length=500,
+    )
+    sender_address: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=1000,
+    )
+    sender_display_name: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=500,
+    )
+    body_text: str = Field(
+        min_length=1,
+        max_length=20000,
+    )
+    external_message_id: str = Field(
+        min_length=1,
+        max_length=500,
+    )
+    external_conversation_id: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=500,
+    )
+    occurred_at: Optional[datetime] = None
+    attachments: list[InboundAttachment] = Field(
+        default_factory=list,
+        max_length=20,
+    )
+
+
 def normalize_website_message(
     *,
     authenticated_channel: str,
@@ -90,6 +129,37 @@ def normalize_email_message(
         channel=authenticated_channel,
         text=text,
         sender=InboundSender(
+            address=envelope.sender_address,
+            display_name=envelope.sender_display_name,
+        ),
+        external_message_id=envelope.external_message_id,
+        external_conversation_id=envelope.external_conversation_id,
+        occurred_at=envelope.occurred_at,
+        attachments=list(envelope.attachments),
+    )
+
+
+def normalize_whatsapp_message(
+    *,
+    authenticated_channel: str,
+    envelope: WhatsAppInboundEnvelope,
+) -> NormalizedInboundMessage:
+    """Translate a verified WhatsApp envelope into the common inbox contract.
+
+    Provider-specific webhook verification remains outside this adapter. The caller
+    must establish WhatsApp channel authority before constructing the envelope.
+    """
+
+    if authenticated_channel != "whatsapp":
+        raise ValueError(
+            "WhatsApp adapter requires the authenticated whatsapp channel"
+        )
+
+    return NormalizedInboundMessage(
+        channel=authenticated_channel,
+        text=envelope.body_text,
+        sender=InboundSender(
+            external_id=envelope.sender_external_id,
             address=envelope.sender_address,
             display_name=envelope.sender_display_name,
         ),
