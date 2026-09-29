@@ -101,4 +101,4 @@ jobs:
           done
 
       - name: Run PostgreSQL persistence integration test
-        run: python tests/integration_database.py -q
+        run: PYTHONPATH=. python tests/integration_database.py -q
