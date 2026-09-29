@@ -80,6 +80,56 @@ class ProviderDirectoryContractTests(unittest.TestCase):
                 provider_directory.list_approved_providers_for_service("Plumbing")
             connect.assert_not_called()
 
+    def test_area_key_is_explicit_canonical_identifier(self):
+        for area_key in (
+            "bn:brunei-muara",
+            "au:nsw:sydney",
+            "postcode:2000",
+            "zone:north-1",
+        ):
+            with self.subTest(area_key=area_key):
+                self.assertEqual(
+                    provider_directory.validate_area_key(area_key),
+                    area_key,
+                )
+
+        for area_key in (
+            "BN:brunei-muara",
+            " bn:brunei-muara",
+            "bn:brunei muara",
+            "bn/brunei-muara",
+            "",
+            "x" * 121,
+            None,
+        ):
+            with self.subTest(area_key=area_key):
+                with self.assertRaises(ProviderDirectoryValidationError):
+                    provider_directory.validate_area_key(area_key)
+
+    def test_invalid_area_key_fails_before_database_access(self):
+        with patch.object(provider_directory, "get_connection") as connect:
+            with self.assertRaises(ProviderDirectoryValidationError):
+                provider_directory.add_provider_coverage_area(
+                    "provider-id",
+                    "Brunei Muara",
+                )
+            connect.assert_not_called()
+
+    def test_service_area_lookup_validates_both_inputs_before_database_access(self):
+        for service_slug, area_key in (
+            ("Plumbing", "bn:brunei-muara"),
+            ("plumbing", "BN:brunei-muara"),
+        ):
+            with self.subTest(service_slug=service_slug, area_key=area_key), patch.object(
+                provider_directory, "get_connection"
+            ) as connect:
+                with self.assertRaises(ProviderDirectoryValidationError):
+                    provider_directory.list_approved_providers_for_service_and_area(
+                        service_slug,
+                        area_key,
+                    )
+                connect.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
