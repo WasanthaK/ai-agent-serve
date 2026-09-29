@@ -125,18 +125,20 @@ Completed slices:
 - documented trust boundary: adapters authenticate/bind source; normalized payload carries data, not authority
 - existing website `POST /webhook/quote-request` internally translated into the normalized contract while preserving its external API, source authentication/mismatch checks, idempotency identity, persistence semantics and response shape
 - website adapter CI verification completed successfully in PR #21
+- channel-bound inbound credentials added and CI-verified in PR #22, while preserving the legacy single-channel deployment path
+- provider-neutral `EmailInboundEnvelope` and email normalization contract defined with strict sender/message/thread/timestamp/attachment handling
 
-Current prerequisite slice:
+Current bounded prerequisite:
 
-- bind inbound credentials to explicit channels before adding another adapter
-- preserve the existing single-channel `AGENT_INBOUND_API_KEY` + `AGENT_INBOUND_SOURCE` deployment contract during migration
-- add `AGENT_INBOUND_CREDENTIALS` for multiple channel-specific credentials
-- ensure credentials for one channel cannot call another channel's inbound route
+- durably persist the normalized inbound envelope before exposing live email ingress
+- preserve email sender identity, external message/thread identifiers, occurrence timestamp and attachment references
+- make persistence retry-safe and suitable for future reply routing
+- do not expose a public email route until this envelope storage is proven
 
 Initial adapters:
 
 - Website webhook — implemented and CI-verified
-- Email — next bounded adapter after channel-bound authentication merges
+- Email — normalization contract implemented; durable envelope persistence is next
 - WhatsApp
 
 Later adapters:
