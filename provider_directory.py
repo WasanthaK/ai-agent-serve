@@ -1,8 +1,9 @@
 """Deterministic provider-directory persistence for Phase 5.
 
 This module stores provider identity, approval state, explicit service
-capabilities, and explicit coverage areas. It does not perform routing,
-proximity matching, onboarding, or approval authorization.
+capabilities, explicit coverage areas, and explicit availability indicators. It
+does not perform routing, proximity matching, scheduling, onboarding, or approval
+authorization.
 """
 
 import re
@@ -19,6 +20,12 @@ APPROVAL_STATUSES = frozenset({
     "approved",
     "suspended",
     "rejected",
+})
+
+AVAILABILITY_STATUSES = frozenset({
+    "unknown",
+    "available",
+    "unavailable",
 })
 
 AREA_KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,119}$")
@@ -46,6 +53,14 @@ def validate_approval_status(value: str) -> str:
     if value not in APPROVAL_STATUSES:
         raise ProviderDirectoryValidationError(
             f"Unsupported provider approval status: {value}"
+        )
+    return value
+
+
+def validate_availability_status(value: str) -> str:
+    if value not in AVAILABILITY_STATUSES:
+        raise ProviderDirectoryValidationError(
+            f"Unsupported provider availability status: {value}"
         )
     return value
 
@@ -168,11 +183,7 @@ def list_approved_providers():
 
 
 def add_provider_service_capability(provider_id, service_slug: str):
-    """Assign one canonical service capability to an existing provider.
-
-    This is a persistence primitive only. Authorization for capability mutation
-    belongs to a later application-layer provider-management boundary.
-    """
+    """Assign one canonical service capability to an existing provider."""
 
     service_slug = validate_service_slug(service_slug)
 
@@ -295,11 +306,7 @@ def list_approved_providers_for_service_and_area(
     service_slug: str,
     area_key: str,
 ):
-    """Return approved providers with exact service and exact area eligibility.
-
-    This is a deterministic eligibility query only. It does not rank or select a
-    provider and it does not infer geographic equivalence or proximity.
-    """
+    """Return approved providers with exact service and exact area eligibility."""
 
     service_slug = validate_service_slug(service_slug)
     area_key = validate_area_key(area_key)
@@ -317,6 +324,84 @@ def list_approved_providers_for_service_and_area(
                 WHERE p.approval_status = 'approved'
                   AND c.service_slug = %s
                   AND a.area_key = %s
+                ORDER BY p.created_at ASC, p.id ASC
+                """,
+                (service_slug, area_key),
+            )
+            return cur.fetchall()
+
+
+def set_provider_availability(provider_id, availability_status: str):
+    """Persist one explicit provider availability indicator.
+
+    Availability is application-owned state. This function does not infer
+    availability from messages, calendars, model output, or historical behaviour.
+    """
+
+    availability_status = validate_availability_status(availability_status)
+
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                INSERT INTO provider_availability (
+                    provider_id,
+                    availability_status
+                )
+                VALUES (%s, %s)
+                ON CONFLICT (provider_id) DO UPDATE
+                SET availability_status = EXCLUDED.availability_status,
+                    updated_at = NOW()
+                RETURNING provider_id, availability_status, updated_at
+                """,
+                (provider_id, availability_status),
+            )
+            return cur.fetchone()
+
+
+def get_provider_availability(provider_id):
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT provider_id, availability_status, updated_at
+                FROM provider_availability
+                WHERE provider_id = %s
+                """,
+                (provider_id,),
+            )
+            return cur.fetchone()
+
+
+def list_available_approved_providers_for_service_and_area(
+    service_slug: str,
+    area_key: str,
+):
+    """Return explicitly available providers with exact service/area eligibility.
+
+    Providers with no availability row or with `unknown`/`unavailable` status are
+    excluded. This is deterministic filtering only; it does not rank or select.
+    """
+
+    service_slug = validate_service_slug(service_slug)
+    area_key = validate_area_key(area_key)
+
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT p.*
+                FROM providers AS p
+                INNER JOIN provider_service_capabilities AS c
+                    ON c.provider_id = p.id
+                INNER JOIN provider_coverage_areas AS a
+                    ON a.provider_id = p.id
+                INNER JOIN provider_availability AS v
+                    ON v.provider_id = p.id
+                WHERE p.approval_status = 'approved'
+                  AND c.service_slug = %s
+                  AND a.area_key = %s
+                  AND v.availability_status = 'available'
                 ORDER BY p.created_at ASC, p.id ASC
                 """,
                 (service_slug, area_key),
