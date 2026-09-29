@@ -130,6 +130,43 @@ class ProviderDirectoryContractTests(unittest.TestCase):
                     )
                 connect.assert_not_called()
 
+    def test_only_explicit_availability_states_are_accepted(self):
+        for status in ("unknown", "available", "unavailable"):
+            with self.subTest(status=status):
+                self.assertEqual(
+                    provider_directory.validate_availability_status(status),
+                    status,
+                )
+
+        for status in ("busy", "AVAILABLE", "limited", "", None):
+            with self.subTest(status=status):
+                with self.assertRaises(ProviderDirectoryValidationError):
+                    provider_directory.validate_availability_status(status)
+
+    def test_invalid_availability_fails_before_database_access(self):
+        with patch.object(provider_directory, "get_connection") as connect:
+            with self.assertRaises(ProviderDirectoryValidationError):
+                provider_directory.set_provider_availability(
+                    "provider-id",
+                    "busy",
+                )
+            connect.assert_not_called()
+
+    def test_available_service_area_lookup_validates_inputs_before_database_access(self):
+        for service_slug, area_key in (
+            ("Plumbing", "bn:brunei-muara"),
+            ("plumbing", "BN:brunei-muara"),
+        ):
+            with self.subTest(service_slug=service_slug, area_key=area_key), patch.object(
+                provider_directory, "get_connection"
+            ) as connect:
+                with self.assertRaises(ProviderDirectoryValidationError):
+                    provider_directory.list_available_approved_providers_for_service_and_area(
+                        service_slug,
+                        area_key,
+                    )
+                connect.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
