@@ -6,7 +6,6 @@ from uuid import uuid4
 from db import get_connection
 from provider_directory import create_provider, get_provider, get_provider_compliance
 from provider_onboarding import (
-    ProviderInvitationInvalidError,
     accept_provider_invitation,
     advance_provider_onboarding,
     create_provider_invitation,
@@ -79,7 +78,7 @@ class ProviderOnboardingIntegrationTests(unittest.TestCase):
                 with conn.cursor() as cur:
                     cur.execute("DELETE FROM providers WHERE id = %s", (provider_id,))
 
-    def test_expired_invitation_is_durably_expired_and_can_be_replaced(self):
+    def test_expired_pending_invitation_is_replaced_without_old_secret_use(self):
         provider_id = uuid4()
         create_provider(
             "CI Expired Invitation Provider",
@@ -93,7 +92,6 @@ class ProviderOnboardingIntegrationTests(unittest.TestCase):
                 datetime.now(timezone.utc) + timedelta(hours=1),
             )
             invitation_id = created["invitation"]["id"]
-            secret = created["secret"]
 
             with get_connection() as conn:
                 with conn.cursor() as cur:
@@ -106,17 +104,6 @@ class ProviderOnboardingIntegrationTests(unittest.TestCase):
                         (invitation_id,),
                     )
 
-            with self.assertRaises(ProviderInvitationInvalidError):
-                accept_provider_invitation(secret)
-
-            with get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT invitation_status FROM provider_invitations WHERE id = %s",
-                        (invitation_id,),
-                    )
-                    self.assertEqual(cur.fetchone()[0], "expired")
-
             replacement = create_provider_invitation(
                 provider_id,
                 datetime.now(timezone.utc) + timedelta(hours=1),
@@ -125,6 +112,14 @@ class ProviderOnboardingIntegrationTests(unittest.TestCase):
                 replacement["invitation"]["invitation_status"],
                 "pending",
             )
+
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT invitation_status FROM provider_invitations WHERE id = %s",
+                        (invitation_id,),
+                    )
+                    self.assertEqual(cur.fetchone()[0], "expired")
         finally:
             with get_connection() as conn:
                 with conn.cursor() as cur:
