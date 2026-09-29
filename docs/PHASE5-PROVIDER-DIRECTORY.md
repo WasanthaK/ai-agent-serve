@@ -2,9 +2,9 @@
 
 ## Purpose
 
-The Phase 5 provider directory is a deterministic source of provider identity, approval state, explicit service capabilities and explicit coverage areas.
+The Phase 5 provider directory is a deterministic source of provider identity, approval state, explicit service capabilities, explicit coverage areas and explicit availability indicators.
 
-These are eligibility facts only. This stage does not rank, select or route providers and does not yet implement availability, compliance evidence, provider onboarding, RFQs, quote collection or quote evaluation.
+These are eligibility facts only. This stage does not rank, select or route providers and does not yet implement compliance evidence, provider onboarding, RFQs, quote collection or quote evaluation.
 
 ## Authority boundary
 
@@ -21,7 +21,7 @@ The persistence layer accepts only these explicit approval states:
 
 Only records whose persisted state is exactly `approved` are returned by approved-provider queries.
 
-Service capability and coverage-area assignment are also deterministic persisted facts. Neither is a routing score, endorsement, ranking or provider-selection decision.
+Service capability, coverage-area assignment and availability are deterministic persisted facts. None is a routing score, endorsement, ranking or provider-selection decision.
 
 This stage intentionally exposes no HTTP provider-management write endpoint. Authorization and audited lifecycle transitions will be added separately before provider-management mutations become available through the application.
 
@@ -70,6 +70,27 @@ The exact service-and-area eligibility query requires all three persisted facts:
 
 The result is an eligible set only. It does not rank or select a provider.
 
+## Availability indicators
+
+`provider_availability` stores one explicit operational status per provider:
+
+- `unknown`
+- `available`
+- `unavailable`
+
+Availability is application-owned state. It is not inferred from messages, model output, historical behaviour or an external calendar in this slice.
+
+The available-provider eligibility query requires all four persisted facts:
+
+1. provider `approval_status = 'approved'`;
+2. the requested canonical service capability;
+3. the exact requested coverage-area key; and
+4. `availability_status = 'available'`.
+
+A provider with no availability record, `unknown`, or `unavailable` fails closed and is excluded from the available set.
+
+This is still filtering only; it does not rank or select a provider and does not model appointment windows or capacity.
+
 ## Persistence contract
 
 `provider_directory.py` provides:
@@ -84,6 +105,9 @@ The result is an eligible set only. It does not rank or select a provider.
 - `add_provider_coverage_area(...)`
 - `list_provider_coverage_areas(...)`
 - `list_approved_providers_for_service_and_area(...)`
+- `set_provider_availability(...)`
+- `get_provider_availability(...)`
+- `list_available_approved_providers_for_service_and_area(...)`
 
 Input validation happens before database access.
 
@@ -91,7 +115,8 @@ Input validation happens before database access.
 
 This foundation does not yet include:
 
-- availability indicators
+- calendar/time-window availability
+- capacity or workload scoring
 - compliance records
 - approval transition APIs
 - provider-management HTTP mutation APIs
@@ -105,6 +130,6 @@ Those remain later Phase 5 slices.
 
 ## Verification
 
-The PostgreSQL integration suite proves provider identity and approval-state persistence, canonical service capabilities, exact coverage-area assignment, idempotent duplicate assignments, and approved-provider filtering by exact service plus exact area.
+The PostgreSQL integration suite proves provider identity and approval-state persistence, canonical service capabilities, exact coverage-area assignment, explicit availability state, idempotent assignments, and fail-closed approved-provider filtering by service, area and availability.
 
 The migrations are also exercised by the existing fresh-database bootstrap and migration-idempotency checks.
