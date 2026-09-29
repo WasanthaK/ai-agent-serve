@@ -164,22 +164,29 @@ Channel adapters should translate messages into the common request format. They 
 
 ### Phase 5A — Provider management
 
-Provider management starts with an approved-provider directory.
+Provider management starts with deterministic provider identity, approval and eligibility facts before routing exists.
+
+Completed:
+
+- Approved-provider directory foundation implemented and CI-verified in PR #28
+- durable provider identity
+- explicit approval states: `pending`, `approved`, `suspended`, `rejected`
+- repository-level approved-only reads
+- provider approval remains application authority, never model authority
 
 Current bounded work:
 
-- establish durable provider identity and deterministic approval state
-- permit only explicit approval states: `pending`, `approved`, `suspended`, `rejected`
-- expose repository-level reads for all providers and approved-only providers
-- prove that only persisted `approved` records enter the approved-provider directory
-- keep provider approval as application authority, never model authority
-- do not add routing, provider-management HTTP mutation endpoints, capability matching or onboarding in this slice
-- reuse the existing service-catalogue slugs for later provider capabilities rather than creating a parallel category taxonomy
+- assign explicit provider service capabilities using only canonical service slugs from `agent_skills/service_catalog.py`
+- reject unknown or non-canonical service slugs before database access
+- make duplicate provider/service assignment idempotent
+- expose approved-provider lookup by exact service capability
+- require both persisted `approved` state and explicit capability assignment for that lookup
+- do not add routing, ranking, coverage matching, availability, provider-management HTTP mutations or onboarding in this slice
 
 Provider management roadmap:
 
-- Approved-provider directory — foundation in progress
-- Service capabilities
+- Approved-provider directory — foundation complete
+- Service capabilities — in progress
 - Coverage areas
 - Availability indicators
 - Compliance and approval status
