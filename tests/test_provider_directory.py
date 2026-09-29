@@ -55,6 +55,31 @@ class ProviderDirectoryContractTests(unittest.TestCase):
         self.assertEqual(result, approved)
         list_providers.assert_called_once_with(approval_status="approved")
 
+    def test_service_slug_must_match_canonical_service_catalogue(self):
+        for slug in ("plumbing", "electrical", "hvac", "cleaning"):
+            with self.subTest(slug=slug):
+                self.assertEqual(provider_directory.validate_service_slug(slug), slug)
+
+        for slug in ("Plumbing", " plumbing", "plumbing ", "unknown-service", "", None):
+            with self.subTest(slug=slug):
+                with self.assertRaises(ProviderDirectoryValidationError):
+                    provider_directory.validate_service_slug(slug)
+
+    def test_invalid_service_slug_fails_before_database_access(self):
+        with patch.object(provider_directory, "get_connection") as connect:
+            with self.assertRaises(ProviderDirectoryValidationError):
+                provider_directory.add_provider_service_capability(
+                    "provider-id",
+                    "not-in-catalogue",
+                )
+            connect.assert_not_called()
+
+    def test_approved_service_lookup_validates_slug_before_database_access(self):
+        with patch.object(provider_directory, "get_connection") as connect:
+            with self.assertRaises(ProviderDirectoryValidationError):
+                provider_directory.list_approved_providers_for_service("Plumbing")
+            connect.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

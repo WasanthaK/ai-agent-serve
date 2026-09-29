@@ -1,13 +1,15 @@
 """Deterministic provider-directory persistence for Phase 5.
 
-This module stores provider identity and approval state only. It does not perform
-routing, capability matching, onboarding, or approval authorization.
+This module stores provider identity, approval state, and explicit service
+capabilities. It does not perform routing, coverage matching, onboarding, or
+approval authorization.
 """
 
 import uuid
 
 from psycopg.rows import dict_row
 
+from agent_skills.service_catalog import service_catalog
 from db import get_connection
 
 
@@ -43,6 +45,24 @@ def validate_approval_status(value: str) -> str:
             f"Unsupported provider approval status: {value}"
         )
     return value
+
+
+def validate_service_slug(value: str) -> str:
+    if not isinstance(value, str):
+        raise ProviderDirectoryValidationError("Service slug must be text")
+
+    normalized = value.strip()
+    if normalized != value or not normalized:
+        raise ProviderDirectoryValidationError("Service slug must be canonical")
+
+    try:
+        service_catalog.get(normalized)
+    except KeyError as exc:
+        raise ProviderDirectoryValidationError(
+            f"Unknown service slug: {normalized}"
+        ) from exc
+
+    return normalized
 
 
 def create_provider(
@@ -124,3 +144,78 @@ def list_approved_providers():
     """Return only providers deterministically marked approved in persisted state."""
 
     return list_providers(approval_status="approved")
+
+
+def add_provider_service_capability(provider_id, service_slug: str):
+    """Assign one canonical service capability to an existing provider.
+
+    This is a persistence primitive only. Authorization for capability mutation
+    belongs to a later application-layer provider-management boundary.
+    """
+
+    service_slug = validate_service_slug(service_slug)
+
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                INSERT INTO provider_service_capabilities (
+                    provider_id,
+                    service_slug
+                )
+                VALUES (%s, %s)
+                ON CONFLICT (provider_id, service_slug) DO NOTHING
+                RETURNING provider_id, service_slug, created_at
+                """,
+                (provider_id, service_slug),
+            )
+            created = cur.fetchone()
+            if created is not None:
+                return created
+
+            cur.execute(
+                """
+                SELECT provider_id, service_slug, created_at
+                FROM provider_service_capabilities
+                WHERE provider_id = %s AND service_slug = %s
+                """,
+                (provider_id, service_slug),
+            )
+            return cur.fetchone()
+
+
+def list_provider_service_capabilities(provider_id):
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT provider_id, service_slug, created_at
+                FROM provider_service_capabilities
+                WHERE provider_id = %s
+                ORDER BY service_slug ASC
+                """,
+                (provider_id,),
+            )
+            return cur.fetchall()
+
+
+def list_approved_providers_for_service(service_slug: str):
+    """Return approved providers explicitly assigned the canonical service slug."""
+
+    service_slug = validate_service_slug(service_slug)
+
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT p.*
+                FROM providers AS p
+                INNER JOIN provider_service_capabilities AS c
+                    ON c.provider_id = p.id
+                WHERE p.approval_status = 'approved'
+                  AND c.service_slug = %s
+                ORDER BY p.created_at ASC, p.id ASC
+                """,
+                (service_slug,),
+            )
+            return cur.fetchall()
