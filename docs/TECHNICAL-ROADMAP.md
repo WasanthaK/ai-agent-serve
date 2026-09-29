@@ -181,23 +181,27 @@ Completed:
 - coverage uses explicit canonical lowercase area keys with exact matching only
 - duplicate provider/area assignments are idempotent
 - approved-provider area eligibility requires persisted approval, exact service capability and exact area assignment
+- provider availability indicators implemented and CI-verified in PR #31
+- availability uses only `unknown`, `available`, `unavailable`
+- missing/unknown availability fails closed
+- available-provider eligibility requires approval, service, area and explicit `available` status
 
 Current bounded work:
 
-- add explicit provider availability indicators with only `unknown`, `available`, `unavailable`
-- treat missing or `unknown` availability as not available
-- persist one current availability indicator per provider
-- expose available-provider eligibility by exact service capability plus exact area key
-- require persisted `approved` state, explicit service capability, explicit area assignment and `availability_status = 'available'`
-- do not add calendars, time windows, capacity scoring, ranking, routing, provider-management HTTP mutations or onboarding in this slice
+- add explicit provider compliance status with only `unknown`, `compliant`, `non_compliant`
+- treat missing or `unknown` compliance as not eligible
+- persist one current compliance status per provider
+- expose fully eligible provider filtering by exact service and area
+- require persisted `approved` state, explicit service capability, explicit area assignment, `availability_status = 'available'`, and `compliance_status = 'compliant'`
+- do not add document interpretation, expiry automation, ranking, routing, provider-management HTTP mutations or onboarding in this slice
 
 Provider management roadmap:
 
 - Approved-provider directory — foundation complete
 - Service capabilities — complete
 - Coverage areas — complete
-- Availability indicators — in progress
-- Compliance and approval status
+- Availability indicators — complete
+- Compliance and approval status — in progress
 - Provider invitation and onboarding
 
 ### Routing skill

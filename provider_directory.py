@@ -1,9 +1,9 @@
 """Deterministic provider-directory persistence for Phase 5.
 
 This module stores provider identity, approval state, explicit service
-capabilities, explicit coverage areas, and explicit availability indicators. It
-does not perform routing, proximity matching, scheduling, onboarding, or approval
-authorization.
+capabilities, explicit coverage areas, explicit availability indicators, and
+explicit compliance status. It does not perform routing, proximity matching,
+scheduling, onboarding, evidence interpretation, or approval authorization.
 """
 
 import re
@@ -26,6 +26,12 @@ AVAILABILITY_STATUSES = frozenset({
     "unknown",
     "available",
     "unavailable",
+})
+
+COMPLIANCE_STATUSES = frozenset({
+    "unknown",
+    "compliant",
+    "non_compliant",
 })
 
 AREA_KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,119}$")
@@ -61,6 +67,14 @@ def validate_availability_status(value: str) -> str:
     if value not in AVAILABILITY_STATUSES:
         raise ProviderDirectoryValidationError(
             f"Unsupported provider availability status: {value}"
+        )
+    return value
+
+
+def validate_compliance_status(value: str) -> str:
+    if value not in COMPLIANCE_STATUSES:
+        raise ProviderDirectoryValidationError(
+            f"Unsupported provider compliance status: {value}"
         )
     return value
 
@@ -373,6 +387,48 @@ def get_provider_availability(provider_id):
             return cur.fetchone()
 
 
+def set_provider_compliance(provider_id, compliance_status: str):
+    """Persist one explicit provider compliance status.
+
+    Compliance is application-owned state. This function does not inspect or
+    infer license, insurance, certificate, expiry, or other evidence.
+    """
+
+    compliance_status = validate_compliance_status(compliance_status)
+
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                INSERT INTO provider_compliance (
+                    provider_id,
+                    compliance_status
+                )
+                VALUES (%s, %s)
+                ON CONFLICT (provider_id) DO UPDATE
+                SET compliance_status = EXCLUDED.compliance_status,
+                    updated_at = NOW()
+                RETURNING provider_id, compliance_status, updated_at
+                """,
+                (provider_id, compliance_status),
+            )
+            return cur.fetchone()
+
+
+def get_provider_compliance(provider_id):
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT provider_id, compliance_status, updated_at
+                FROM provider_compliance
+                WHERE provider_id = %s
+                """,
+                (provider_id,),
+            )
+            return cur.fetchone()
+
+
 def list_available_approved_providers_for_service_and_area(
     service_slug: str,
     area_key: str,
@@ -402,6 +458,45 @@ def list_available_approved_providers_for_service_and_area(
                   AND c.service_slug = %s
                   AND a.area_key = %s
                   AND v.availability_status = 'available'
+                ORDER BY p.created_at ASC, p.id ASC
+                """,
+                (service_slug, area_key),
+            )
+            return cur.fetchall()
+
+
+def list_eligible_providers_for_service_and_area(
+    service_slug: str,
+    area_key: str,
+):
+    """Return providers meeting every explicit Phase 5A eligibility fact.
+
+    Missing/unknown compliance or availability fails closed. This function filters
+    only; it does not rank, select, route, or infer compliance from evidence.
+    """
+
+    service_slug = validate_service_slug(service_slug)
+    area_key = validate_area_key(area_key)
+
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT p.*
+                FROM providers AS p
+                INNER JOIN provider_service_capabilities AS c
+                    ON c.provider_id = p.id
+                INNER JOIN provider_coverage_areas AS a
+                    ON a.provider_id = p.id
+                INNER JOIN provider_availability AS v
+                    ON v.provider_id = p.id
+                INNER JOIN provider_compliance AS k
+                    ON k.provider_id = p.id
+                WHERE p.approval_status = 'approved'
+                  AND c.service_slug = %s
+                  AND a.area_key = %s
+                  AND v.availability_status = 'available'
+                  AND k.compliance_status = 'compliant'
                 ORDER BY p.created_at ASC, p.id ASC
                 """,
                 (service_slug, area_key),
