@@ -173,21 +173,25 @@ Completed:
 - explicit approval states: `pending`, `approved`, `suspended`, `rejected`
 - repository-level approved-only reads
 - provider approval remains application authority, never model authority
+- provider service capabilities implemented and CI-verified in PR #29
+- service capabilities use only canonical slugs from `agent_skills/service_catalog.py`
+- duplicate provider/service assignments are idempotent
+- approved-provider service lookup requires both persisted `approved` state and explicit capability assignment
 
 Current bounded work:
 
-- assign explicit provider service capabilities using only canonical service slugs from `agent_skills/service_catalog.py`
-- reject unknown or non-canonical service slugs before database access
-- make duplicate provider/service assignment idempotent
-- expose approved-provider lookup by exact service capability
-- require both persisted `approved` state and explicit capability assignment for that lookup
-- do not add routing, ranking, coverage matching, availability, provider-management HTTP mutations or onboarding in this slice
+- add explicit provider coverage-area assignments using canonical lowercase area keys
+- treat area keys as opaque deterministic identifiers; do not geocode, infer hierarchy, calculate distance or perform fuzzy matching
+- make duplicate provider/area assignment idempotent
+- expose approved-provider eligibility by exact service capability plus exact area key
+- require persisted `approved` state, explicit service capability and explicit area assignment
+- do not rank or select providers and do not add availability, provider-management HTTP mutations or onboarding in this slice
 
 Provider management roadmap:
 
 - Approved-provider directory — foundation complete
-- Service capabilities — in progress
-- Coverage areas
+- Service capabilities — complete
+- Coverage areas — in progress
 - Availability indicators
 - Compliance and approval status
 - Provider invitation and onboarding

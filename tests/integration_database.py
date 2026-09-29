@@ -11,11 +11,14 @@ from inbound_persistence import (
     save_inbound_message,
 )
 from provider_directory import (
+    add_provider_coverage_area,
     add_provider_service_capability,
     create_provider,
     get_provider,
     list_approved_providers,
     list_approved_providers_for_service,
+    list_approved_providers_for_service_and_area,
+    list_provider_coverage_areas,
     list_provider_service_capabilities,
 )
 
@@ -237,6 +240,71 @@ class DatabaseIntegrationTests(unittest.TestCase):
                     cur.execute(
                         "DELETE FROM providers WHERE id IN (%s, %s, %s)",
                         (approved_id, pending_id, unrelated_id),
+                    )
+
+    def test_provider_coverage_area_exact_service_area_eligibility(self):
+        approved_local_id = uuid4()
+        approved_other_area_id = uuid4()
+        pending_local_id = uuid4()
+
+        for provider_id, name, status in (
+            (approved_local_id, "CI Local Approved Plumber", "approved"),
+            (approved_other_area_id, "CI Other Area Plumber", "approved"),
+            (pending_local_id, "CI Local Pending Plumber", "pending"),
+        ):
+            create_provider(
+                name,
+                approval_status=status,
+                provider_id=provider_id,
+            )
+            add_provider_service_capability(provider_id, "plumbing")
+
+        try:
+            first = add_provider_coverage_area(
+                approved_local_id,
+                "bn:brunei-muara",
+            )
+            duplicate = add_provider_coverage_area(
+                approved_local_id,
+                "bn:brunei-muara",
+            )
+            add_provider_coverage_area(
+                approved_other_area_id,
+                "bn:tutong",
+            )
+            add_provider_coverage_area(
+                pending_local_id,
+                "bn:brunei-muara",
+            )
+
+            self.assertEqual(first["provider_id"], approved_local_id)
+            self.assertEqual(first["area_key"], "bn:brunei-muara")
+            self.assertEqual(duplicate["provider_id"], approved_local_id)
+
+            areas = list_provider_coverage_areas(approved_local_id)
+            self.assertEqual(
+                [area["area_key"] for area in areas],
+                ["bn:brunei-muara"],
+            )
+
+            matching = list_approved_providers_for_service_and_area(
+                "plumbing",
+                "bn:brunei-muara",
+            )
+            matching_ids = {provider["id"] for provider in matching}
+            self.assertIn(approved_local_id, matching_ids)
+            self.assertNotIn(approved_other_area_id, matching_ids)
+            self.assertNotIn(pending_local_id, matching_ids)
+        finally:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM providers WHERE id IN (%s, %s, %s)",
+                        (
+                            approved_local_id,
+                            approved_other_area_id,
+                            pending_local_id,
+                        ),
                     )
 
 
