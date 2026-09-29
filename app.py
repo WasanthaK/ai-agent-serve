@@ -31,6 +31,11 @@ from idempotency import (
     reserve_webhook_delivery,
 )
 from inbound_adapters import normalize_website_message
+from inbound_persistence import (
+    InboundMessageConflictError,
+    link_inbound_message_to_request,
+    save_inbound_message,
+)
 from observability import (
     StructuredRequestLoggingMiddleware,
     correlation_exception_handler,
@@ -223,11 +228,6 @@ def quote_webhook(
         audit_denial(http_request, "source_mismatch", f"channel:{source}")
         raise HTTPException(status_code=403, detail="Source is not authorized")
 
-    inbound_message = normalize_website_message(
-        authenticated_channel=source,
-        text=request.message,
-    )
-
     key_hash = None
     reserved_request_id = None
 
@@ -238,8 +238,15 @@ def quote_webhook(
                 status_code=400,
                 detail="Invalid Idempotency-Key",
             )
-
         key_hash = hash_idempotency_key(normalized_key)
+
+    inbound_message = normalize_website_message(
+        authenticated_channel=source,
+        text=request.message,
+        external_message_id=key_hash,
+    )
+
+    if key_hash is not None:
         payload_hash = hash_webhook_payload(
             inbound_message.channel,
             request.customer_name,
@@ -274,7 +281,26 @@ def quote_webhook(
                     status_code=503,
                     detail="Stored idempotent request is temporarily unavailable",
                 )
+            try:
+                persisted = save_inbound_message(inbound_message)
+            except InboundMessageConflictError:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Conflicting website message identity",
+                ) from None
+            link_inbound_message_to_request(
+                persisted["message"]["id"],
+                reserved_request_id,
+            )
             return _quote_webhook_response(saved_request)
+
+    try:
+        persisted = save_inbound_message(inbound_message)
+    except InboundMessageConflictError:
+        raise HTTPException(
+            status_code=409,
+            detail="Conflicting website message identity",
+        ) from None
 
     try:
         result = analyze_quote_request(
@@ -317,6 +343,11 @@ def quote_webhook(
             key_hash,
             request_id,
         )
+
+    link_inbound_message_to_request(
+        persisted["message"]["id"],
+        request_id,
+    )
 
     return {
         "request_id": request_id,
