@@ -127,24 +127,27 @@ Completed slices:
 - website adapter CI verification completed successfully in PR #21
 - channel-bound inbound credentials added and CI-verified in PR #22, while preserving the legacy single-channel deployment path
 - provider-neutral `EmailInboundEnvelope` and email normalization contract defined and CI-verified in PR #23 with strict sender/message/thread/timestamp/attachment handling
-- durable `inbound_messages` persistence added for normalized envelopes
+- durable `inbound_messages` persistence added and CI-verified in PR #24
 - exact provider retries are idempotent by `(channel, external_message_id)` and conflicting reuse fails closed
 - normalized sender, message/thread identifiers, occurrence timestamp, attachments, correlation ID and optional request linkage are preserved
 - inbound-to-request linking is one-way/idempotent and refuses relinking to a different request
+- verified SendGrid inbound email ingress implemented and CI-verified in PR #25
+- SendGrid ingress verifies provider authenticity before parsing, persists before AI analysis and uses deterministic request identity for retry recovery
 
-Current bounded prerequisite:
+Current bounded work:
 
-- CI-verify the fresh PostgreSQL migration chain and inbound-envelope round trips for this persistence slice
-- after persistence merges, implement the first provider-specific verified email ingress
-- SendGrid is the preferred first provider
-- verify provider authenticity before parsing/normalization, persist before AI analysis, and keep delivery retry-safe
-- do not configure public DNS, MX records or live SendGrid webhook delivery without explicit authorization immediately before that external change
+- keep live SendGrid DNS/MX/public webhook enablement deliberately deferred until the software work is complete and explicit authorization is given immediately before external changes
+- add the provider-neutral WhatsApp envelope and normalization contract
+- use the existing Quixo Azure messaging service as the public Twilio webhook boundary; do not replace its production/development Twilio webhook with a Mac Mini URL
+- have Quixo Messaging forward trusted WhatsApp events to the agent through a credential explicitly bound to the `whatsapp` channel
+- persist forwarded WhatsApp messages before AI analysis and keep retries idempotent
+- keep Twilio sender/webhook reconfiguration and live end-to-end external proof deferred until explicitly authorized
 
 Initial adapters:
 
 - Website webhook — implemented and CI-verified
-- Email — normalization contract implemented; durable persistence implemented, CI verification pending
-- WhatsApp
+- Email — SendGrid software path implemented and CI-verified; live external enablement deferred
+- WhatsApp — Quixo Messaging -> Agent software path in progress; Twilio remains upstream of the existing Quixo messaging service
 
 Later adapters:
 
