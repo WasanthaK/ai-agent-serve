@@ -102,6 +102,22 @@ def _media_attachments(form, count: int) -> list[InboundAttachment]:
     return attachments
 
 
+def _location_text(form) -> str:
+    latitude = _value(form, "Latitude")
+    longitude = _value(form, "Longitude")
+    if not latitude or not longitude:
+        return ""
+
+    parts = [f"WhatsApp location: {latitude}, {longitude}"]
+    label = _value(form, "Label")
+    address = _value(form, "Address")
+    if label:
+        parts.append(f"Label: {label}")
+    if address:
+        parts.append(f"Address: {address}")
+    return "\n".join(parts)
+
+
 def build_twilio_whatsapp_envelope(
     form,
     *,
@@ -139,11 +155,13 @@ def build_twilio_whatsapp_envelope(
 
     body = _value(form, "Body")
     if not body:
+        body = _location_text(form)
+    if not body:
         if attachments:
             body = f"[WhatsApp media message: {len(attachments)} attachment(s)]"
         else:
             raise TwilioWhatsAppPayloadError(
-                "Inbound WhatsApp message has neither text nor media"
+                "Inbound WhatsApp message has no text, location or media"
             )
 
     sender_external_id = wa_id or from_address
