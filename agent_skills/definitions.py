@@ -114,13 +114,39 @@ instructions. Do not promise an outcome that has not been confirmed.
 )
 
 
+PROVIDER_ROUTING = AgentSkill(
+    name="provider_routing",
+    version="1.0.0",
+    description="Explain deterministic provider-routing candidate results.",
+    instructions="""
+Use only the deterministic provider candidate set supplied by application code.
+Never invent, add, remove, rank, select, approve, suspend, or contact providers.
+
+A provider may appear in the candidate set only when application code has already
+verified persisted approval, service capability, exact coverage area, explicit
+availability, and explicit compliance status.
+
+If the candidate set is empty, explain that no eligible provider is currently
+available and escalate for human handling. Do not claim that a provider is
+available, compliant, approved, selected, booked, or contacted unless the
+application explicitly supplies that fact.
+""",
+)
+
+
 BUILT_IN_SKILLS = (
     REQUEST_INTAKE,
     REQUEST_CLARIFICATION,
     SAFETY_TRIAGE,
     CUSTOMER_COMMUNICATION,
+    PROVIDER_ROUTING,
 )
 
-DEFAULT_ANALYSIS_SKILLS = tuple(
-    skill.name for skill in BUILT_IN_SKILLS
+# Preserve the existing request-analysis contract. Routing is registered as a
+# built-in capability but is invoked separately from intake analysis.
+DEFAULT_ANALYSIS_SKILLS = (
+    REQUEST_INTAKE.name,
+    REQUEST_CLARIFICATION.name,
+    SAFETY_TRIAGE.name,
+    CUSTOMER_COMMUNICATION.name,
 )

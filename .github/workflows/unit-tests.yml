@@ -104,3 +104,4 @@ jobs:
         run: |
           PYTHONPATH=. python tests/integration_database.py -q
           PYTHONPATH=. python tests/integration_provider_onboarding.py -q
+          PYTHONPATH=. python tests/integration_provider_routing.py -q
