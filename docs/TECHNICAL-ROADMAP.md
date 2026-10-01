@@ -164,7 +164,7 @@ Channel adapters should translate messages into the common request format. They 
 
 ### Phase 5A — Provider management
 
-Provider management starts with deterministic provider identity, approval and eligibility facts before routing exists.
+Phase 5A is complete.
 
 Completed:
 
@@ -189,28 +189,44 @@ Completed:
 - compliance uses only `unknown`, `compliant`, `non_compliant`
 - missing/unknown compliance fails closed
 - fully eligible provider filtering requires approval, service, area, availability and compliance
-
-Current bounded work:
-
-- add provider invitation and onboarding lifecycle persistence
-- generate cryptographically secure one-time invitation secrets and persist only SHA-256 hashes
-- permit only explicit invitation states: `pending`, `accepted`, `revoked`, `expired`
-- permit only explicit onboarding states: `not_started`, `in_progress`, `submitted`, `completed`
-- make accepted-invitation retries idempotent and durably expire expired invitations
-- advance onboarding only through explicit one-step transitions
-- prove onboarding completion does not grant provider approval or compliance
-- do not add external invitation delivery, public acceptance endpoints, ranking, routing or RFQ behavior in this slice
+- provider invitation and onboarding implemented and CI-verified in PR #33
+- invitation secrets are generated securely and only SHA-256 hashes are persisted
+- explicit invitation lifecycle: `pending`, `accepted`, `revoked`, `expired`
+- explicit onboarding lifecycle: `not_started`, `in_progress`, `submitted`, `completed`
+- onboarding completion never grants provider approval or compliance
 
 Provider management roadmap:
 
-- Approved-provider directory — foundation complete
+- Approved-provider directory — complete
 - Service capabilities — complete
 - Coverage areas — complete
 - Availability indicators — complete
 - Compliance and approval status — complete
-- Provider invitation and onboarding — in progress
+- Provider invitation and onboarding — complete
 
-### Routing skill
+### Phase 5B — Routing skill
+
+Routing starts from deterministic provider eligibility. The model may later explain routing results but cannot create eligibility, broaden policy, or grant provider authority.
+
+Current bounded work:
+
+- register `provider_routing` as a built-in skill without changing `DEFAULT_ANALYSIS_SKILLS`
+- build an unranked routing candidate set from the fully eligible provider-directory query
+- expose only provider ID and display name in the candidate contract
+- preserve exact service and exact area matching
+- return explicit `no_eligible_provider` with human escalation when no candidate exists
+- prove the routing candidate set against real PostgreSQL provider state
+- do not rank, score, select, contact, dispatch, or mutate providers in this slice
+
+Routing roadmap:
+
+- Deterministic candidate construction — in progress
+- Routing explanation from deterministic evidence
+- Policy-aware ranking/scoring, only after explicit policy design
+- Human-approved provider selection
+- RFQ handoff
+
+Target routing behavior:
 
 - Match category and service area
 - Respect approved-provider policies
@@ -270,7 +286,7 @@ Production behaviour must never change solely because of unreviewed model output
 | Request clarification | Identify essential missing information | Follow-up preparation |
 | Safety triage | Detect hazards and enforce escalation | Human-review queue |
 | Customer communication | Produce channel-appropriate messages | Email, WhatsApp, SMS |
-| Provider routing | Select suitable approved providers | Provider directory |
+| Provider routing | Identify suitable approved provider candidates | Provider directory |
 | Quote preparation | Create a normalized RFQ | Quotation service |
 | Quote evaluation | Compare provider responses | Evaluation records |
 | Delivery coordination | Manage appointments and exceptions | Calendar, messaging |
