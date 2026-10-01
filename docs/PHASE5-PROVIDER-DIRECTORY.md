@@ -2,9 +2,9 @@
 
 ## Purpose
 
-The Phase 5 provider directory is a deterministic source of provider identity, approval state, explicit service capabilities, explicit coverage areas, explicit availability indicators and explicit compliance status.
+The Phase 5 provider-management foundation is a deterministic source of provider identity, approval state, explicit service capabilities, explicit coverage areas, explicit availability indicators, explicit compliance status, and explicit invitation/onboarding state.
 
-These are eligibility facts only. This stage does not rank, select or route providers and does not yet implement provider onboarding, RFQs, quote collection or quote evaluation.
+These are eligibility and lifecycle facts only. This stage does not rank, select or route providers and does not yet implement RFQs, quote collection or quote evaluation.
 
 ## Authority boundary
 
@@ -21,9 +21,11 @@ The persistence layer accepts only these explicit approval states:
 
 Only records whose persisted state is exactly `approved` are returned by approved-provider queries.
 
-Service capability, coverage-area assignment, availability and compliance are deterministic persisted facts. None is a routing score, endorsement, ranking or provider-selection decision.
+Service capability, coverage-area assignment, availability, compliance, invitation and onboarding state are deterministic persisted facts. None is a routing score, endorsement, ranking or provider-selection decision.
 
-This stage intentionally exposes no HTTP provider-management write endpoint. Authorization and audited lifecycle transitions will be added separately before provider-management mutations become available through the application.
+Completing onboarding does not grant approval, compliance, availability or routing eligibility.
+
+This stage intentionally exposes no provider-management HTTP mutation endpoint. Authorization and audited lifecycle transitions must remain in the application layer before these persistence primitives are exposed externally.
 
 ## Provider record
 
@@ -79,7 +81,7 @@ Availability is application-owned state. It is not inferred from messages, model
 
 Missing, `unknown`, or `non_compliant` compliance fails closed and is excluded from the fully eligible provider set.
 
-Compliance is application-owned state. This slice does not inspect licenses, insurance documents, expiry dates, certificates or model-generated evidence. Those can be introduced later behind an audited application boundary.
+Compliance is application-owned state. This slice does not inspect licenses, insurance documents, expiry dates, certificates or model-generated evidence.
 
 The fully eligible provider query requires all five persisted facts:
 
@@ -91,24 +93,55 @@ The fully eligible provider query requires all five persisted facts:
 
 The result is an eligible set only. It does not rank, select or route a provider.
 
+## Invitation and onboarding
+
+`provider_invitations` stores invitation metadata and a SHA-256 hash of the one-time invitation secret. The raw invitation secret is returned only at creation time and is never persisted.
+
+Invitation states are explicit:
+
+- `pending`
+- `accepted`
+- `revoked`
+- `expired`
+
+Only one pending invitation is permitted per provider. Expired invitations are durably marked expired so a replacement invite can be created. Repeating acceptance with an already accepted secret is idempotent.
+
+`provider_onboarding` stores one onboarding state per provider:
+
+- `not_started`
+- `in_progress`
+- `submitted`
+- `completed`
+
+Onboarding advances one step at a time. Accepting an invitation moves `not_started` to `in_progress`; later transitions are `in_progress -> submitted -> completed`.
+
+Onboarding completion does not alter provider approval or compliance status.
+
+No email, SMS, WhatsApp or other invitation delivery is performed in this slice. No public acceptance endpoint is exposed.
+
 ## Persistence contract
 
-`provider_directory.py` provides provider identity, approval, capability, coverage, availability and compliance persistence/read functions, including:
+`provider_directory.py` provides provider identity, approval, capability, coverage, availability and compliance persistence/read functions.
 
-- `set_provider_compliance(...)`
-- `get_provider_compliance(...)`
-- `list_eligible_providers_for_service_and_area(...)`
+`provider_onboarding.py` provides invitation and onboarding lifecycle functions including:
 
-Input validation happens before database access.
+- `create_provider_invitation(...)`
+- `accept_provider_invitation(...)`
+- `revoke_provider_invitation(...)`
+- `get_provider_onboarding(...)`
+- `advance_provider_onboarding(...)`
+
+Input validation happens before database access where applicable.
 
 ## Current exclusions
 
 This foundation does not yet include:
 
 - compliance evidence documents or expiry handling
-- approval transition APIs
+- audited provider approval transition APIs
 - provider-management HTTP mutation APIs
-- provider invitation or onboarding
+- invitation delivery through email, SMS, WhatsApp or another external channel
+- public invitation-acceptance endpoints
 - calendar/time-window availability
 - capacity or workload scoring
 - proximity/fuzzy/hierarchical area matching
@@ -116,10 +149,10 @@ This foundation does not yet include:
 - RFQ delivery
 - quotation ingestion or evaluation
 
-Those remain later Phase 5 slices.
+Those remain later Phase 5 or subsequent slices.
 
 ## Verification
 
-The PostgreSQL integration suite proves provider identity and approval-state persistence, canonical service capabilities, exact coverage-area assignment, explicit availability, explicit compliance, and fail-closed eligibility filtering across all persisted facts.
+The PostgreSQL integration suites prove provider identity and approval-state persistence, canonical service capabilities, exact coverage-area assignment, explicit availability, explicit compliance, fail-closed eligibility filtering, hashed invitation-secret persistence, retry-safe invitation acceptance, durable expiry, onboarding lifecycle transitions, and preservation of provider approval/compliance boundaries through onboarding completion.
 
 The migrations are also exercised by the existing fresh-database bootstrap and migration-idempotency checks.

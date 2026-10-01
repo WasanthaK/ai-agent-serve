@@ -185,15 +185,21 @@ Completed:
 - availability uses only `unknown`, `available`, `unavailable`
 - missing/unknown availability fails closed
 - available-provider eligibility requires approval, service, area and explicit `available` status
+- provider compliance status implemented and CI-verified in PR #32
+- compliance uses only `unknown`, `compliant`, `non_compliant`
+- missing/unknown compliance fails closed
+- fully eligible provider filtering requires approval, service, area, availability and compliance
 
 Current bounded work:
 
-- add explicit provider compliance status with only `unknown`, `compliant`, `non_compliant`
-- treat missing or `unknown` compliance as not eligible
-- persist one current compliance status per provider
-- expose fully eligible provider filtering by exact service and area
-- require persisted `approved` state, explicit service capability, explicit area assignment, `availability_status = 'available'`, and `compliance_status = 'compliant'`
-- do not add document interpretation, expiry automation, ranking, routing, provider-management HTTP mutations or onboarding in this slice
+- add provider invitation and onboarding lifecycle persistence
+- generate cryptographically secure one-time invitation secrets and persist only SHA-256 hashes
+- permit only explicit invitation states: `pending`, `accepted`, `revoked`, `expired`
+- permit only explicit onboarding states: `not_started`, `in_progress`, `submitted`, `completed`
+- make accepted-invitation retries idempotent and durably expire expired invitations
+- advance onboarding only through explicit one-step transitions
+- prove onboarding completion does not grant provider approval or compliance
+- do not add external invitation delivery, public acceptance endpoints, ranking, routing or RFQ behavior in this slice
 
 Provider management roadmap:
 
@@ -201,8 +207,8 @@ Provider management roadmap:
 - Service capabilities — complete
 - Coverage areas — complete
 - Availability indicators — complete
-- Compliance and approval status — in progress
-- Provider invitation and onboarding
+- Compliance and approval status — complete
+- Provider invitation and onboarding — in progress
 
 ### Routing skill
 
