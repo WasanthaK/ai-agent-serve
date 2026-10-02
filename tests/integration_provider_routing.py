@@ -9,7 +9,7 @@ from provider_directory import (
     set_provider_availability,
     set_provider_compliance,
 )
-from provider_routing import build_provider_candidates
+from provider_routing import build_provider_candidates, explain_provider_candidates
 
 
 class ProviderRoutingIntegrationTests(unittest.TestCase):
@@ -47,6 +47,31 @@ class ProviderRoutingIntegrationTests(unittest.TestCase):
                 ],
             )
             self.assertFalse(result["requires_human_review"])
+
+            explained = explain_provider_candidates(
+                "plumbing",
+                "bn:brunei-muara",
+            )
+            self.assertEqual(explained["candidate_count"], 1)
+            self.assertFalse(explained["ranked"])
+            self.assertIsNone(explained["selected_provider_id"])
+            self.assertEqual(
+                explained["candidates"][0]["provider_id"],
+                str(eligible_id),
+            )
+            self.assertEqual(
+                [
+                    reason["code"]
+                    for reason in explained["candidates"][0]["eligibility_reasons"]
+                ],
+                [
+                    "approved",
+                    "service_capability",
+                    "exact_coverage_area",
+                    "available",
+                    "compliant",
+                ],
+            )
         finally:
             with get_connection() as conn:
                 with conn.cursor() as cur:

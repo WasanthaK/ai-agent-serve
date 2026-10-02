@@ -206,22 +206,32 @@ Provider management roadmap:
 
 ### Phase 5B — Routing skill
 
-Routing starts from deterministic provider eligibility. The model may later explain routing results but cannot create eligibility, broaden policy, or grant provider authority.
+Routing starts from deterministic provider eligibility. Explanations may describe proven eligibility evidence but cannot create eligibility, broaden policy, rank providers, or grant provider authority.
+
+Completed:
+
+- deterministic candidate construction implemented and CI-verified in PR #34
+- `provider_routing` registered as a built-in skill without changing `DEFAULT_ANALYSIS_SKILLS`
+- unranked candidates come only from the fully eligible provider-directory query
+- routing preserves exact service and exact area matching
+- candidate output exposes only provider ID and display name
+- an empty candidate set returns `no_eligible_provider` and requires human review
+- PostgreSQL proof verifies persisted compliance is enforced before candidate construction
 
 Current bounded work:
 
-- register `provider_routing` as a built-in skill without changing `DEFAULT_ANALYSIS_SKILLS`
-- build an unranked routing candidate set from the fully eligible provider-directory query
-- expose only provider ID and display name in the candidate contract
-- preserve exact service and exact area matching
-- return explicit `no_eligible_provider` with human escalation when no candidate exists
-- prove the routing candidate set against real PostgreSQL provider state
-- do not rank, score, select, contact, dispatch, or mutate providers in this slice
+- explain routing candidates using only deterministic eligibility evidence already proven by candidate construction
+- construct the candidate set internally rather than accepting caller/model-supplied providers
+- explain only approval, exact service capability, exact coverage area, availability and compliance
+- explicitly mark explanation output as unranked with no selected provider
+- keep empty-result explanations generic rather than guessing why individual providers failed eligibility
+- prove explanations against real PostgreSQL provider state
+- do not rank, score, select, contact, dispatch, mutate providers, or hand off an RFQ in this slice
 
 Routing roadmap:
 
-- Deterministic candidate construction — in progress
-- Routing explanation from deterministic evidence
+- Deterministic candidate construction — complete
+- Routing explanation from deterministic evidence — in progress
 - Policy-aware ranking/scoring, only after explicit policy design
 - Human-approved provider selection
 - RFQ handoff
@@ -286,7 +296,7 @@ Production behaviour must never change solely because of unreviewed model output
 | Request clarification | Identify essential missing information | Follow-up preparation |
 | Safety triage | Detect hazards and enforce escalation | Human-review queue |
 | Customer communication | Produce channel-appropriate messages | Email, WhatsApp, SMS |
-| Provider routing | Identify suitable approved provider candidates | Provider directory |
+| Provider routing | Identify and explain suitable approved provider candidates | Provider directory |
 | Quote preparation | Create a normalized RFQ | Quotation service |
 | Quote evaluation | Compare provider responses | Evaluation records |
 | Delivery coordination | Manage appointments and exceptions | Calendar, messaging |
