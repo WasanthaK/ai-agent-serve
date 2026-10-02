@@ -274,6 +274,49 @@ class RouteAuthorizationTests(unittest.TestCase):
             )
             self.assertEqual(readable.status_code, 200)
 
+    def test_rfq_delivery_activation_requires_decide_permission(self):
+        handoff_id = uuid4()
+        authorized = {
+            "handoff_id": str(handoff_id),
+            "status": "authorized",
+            "response_reliability_started": False,
+        }
+        delivered = {
+            "handoff_id": str(handoff_id),
+            "status": "delivered",
+            "response_reliability_started": True,
+        }
+
+        with patch.object(api, "authorize_rfq_delivery", return_value=authorized) as authorize:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/rfq-handoffs/{handoff_id}/authorize-delivery",
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            authorize.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/rfq-handoffs/{handoff_id}/authorize-delivery",
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+
+        with patch.object(api, "confirm_rfq_delivery", return_value=delivered) as confirm:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/rfq-handoffs/{handoff_id}/confirm-delivery",
+                json={"response_deadline_at": "2026-10-03T12:00:00+00:00"},
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            confirm.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/rfq-handoffs/{handoff_id}/confirm-delivery",
+                json={"response_deadline_at": "2026-10-03T12:00:00+00:00"},
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)
