@@ -72,7 +72,7 @@ It is intentionally separate from `DEFAULT_ANALYSIS_SKILLS`, so existing request
 
 The skill must never invent, add, remove, rank, select, approve, suspend, or contact providers.
 
-This stage exposes no provider-routing HTTP endpoint and registers no write-capable routing tool.
+Candidate construction and explanation register no write-capable model tool. Human provider selection is exposed only through authenticated operator routes and is never available as model authority.
 
 ## Ranking-policy governance
 
@@ -138,6 +138,33 @@ The provider-response opportunity ID is intentionally opaque in this slice. The 
 
 The current ranking policy remains disabled. This slice computes evidence only; it does not reorder candidates or select a provider.
 
+## Human-approved provider selection
+
+Provider selection is an explicit human decision and is separate from model routing explanation and future ranking.
+
+`POST /requests/{request_id}/provider-selection` requires the existing operator `decide` permission. `GET /requests/{request_id}/provider-selection` requires `read`.
+
+Selection is permitted only when the request is actionable:
+
+- `ready`; or
+- `approved`.
+
+The selected providers must be a non-empty subset of the deterministic eligible-provider set for the exact canonical service and exact area at decision time.
+
+The decision is persisted as an immutable set, not an ordered list. Canonical sorting is used only for storage and comparison and must not be interpreted as ranking.
+
+The same transaction:
+
+- locks the request;
+- reconstructs and locks the relevant eligibility rows;
+- snapshots the full eligible-provider ID set;
+- stores the selected provider set, human actor and optional reason; and
+- appends `provider_selection_recorded` to the request audit history.
+
+An exact retry returns the original immutable decision even if provider eligibility changes later. A different retry fails closed rather than silently replacing the human decision.
+
+The selection endpoint does not change request status, contact providers, create RFQs, dispatch work, or activate ranking.
+
 ## Current exclusions
 
 This routing stage does not yet include:
@@ -168,3 +195,5 @@ The PostgreSQL integration proof creates two otherwise matching providers, verif
 Ranking-policy unit tests additionally prove that ranking is disabled by default, eligibility gates cannot become score factors, automatic selection and arbitrary tie-breaking are rejected, active weights must total 100, and every enabled factor must carry complete governance metadata.
 
 The response-reliability PostgreSQL proof verifies a 90-day history window, exclusion of open opportunities, exclusion of stale history, on-time quote and decline handling, late/no-response handling, deterministic basis-point calculation, idempotent response recording, and fail-closed `insufficient_history` behavior below five completed opportunities.
+
+The provider-selection PostgreSQL proof verifies current eligibility enforcement, immutable/idempotent human decisions, audit-event persistence, rejection of ineligible providers, request-state gating, and preservation of the original decision after later eligibility changes. Authorization tests prove that selection requires `decide` while retrieval requires only `read`.
