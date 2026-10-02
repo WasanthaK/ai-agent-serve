@@ -199,6 +199,16 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             recommendation_events[0]["details"]["provider_contacted"]
         )
 
+        set_provider_compliance(second, "non_compliant")
+        with self.assertRaises(QuoteAwardEligibilityError):
+            award_recommended_quote(
+                request_id,
+                UUID(first_result["recommendation_id"]),
+                reason="Human confirmed award after reviewing comparison.",
+                actor="operator:ci",
+            )
+        set_provider_compliance(second, "compliant")
+
         award = award_recommended_quote(
             request_id,
             UUID(first_result["recommendation_id"]),
@@ -241,15 +251,6 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         self.assertFalse(
             award_events[0]["details"]["request_status_changed"]
         )
-
-        set_provider_compliance(second, "non_compliant")
-        another_request_id = save_request(
-            "website",
-            "CI Customer 2",
-            "Need plumbing work",
-            ready_analysis(),
-        )
-        self.request_ids.append(another_request_id)
 
 
 if __name__ == "__main__":
