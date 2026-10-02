@@ -273,16 +273,27 @@ Completed RFQ delivery / response-opportunity activation:
 - response-reliability opportunity creation is atomic with delivery confirmation
 - exact retries are idempotent and conflicting deadlines fail closed
 
+Completed provider-response ingestion:
+
+- governed structured provider-response ingestion implemented and CI-verified in PR #41
+- only delivered RFQ handoffs accept responses
+- only `quote` and `decline` outcomes are accepted
+- response timestamps must be timezone-aware and cannot predate delivery
+- responses are bound deterministically to the handoff and provider
+- ingestion requires operator `decide`
+- `rfq_provider_response_recorded` is written transactionally
+- exact retries are idempotent and conflicting evidence fails closed
+- PostgreSQL response-ingestion integration proof is explicitly included in CI
+
 Current bounded work:
 
-- ingest one structured provider response only for an already delivered RFQ handoff
-- accept only `quote` or `decline` response outcomes
-- require an explicit timezone-aware provider response timestamp
-- bind the response deterministically to the delivered handoff and its provider
-- require operator `decide` for this software-only ingestion path
-- write `rfq_provider_response_recorded` in the same transaction
-- make exact retries idempotent and conflicting response evidence fail closed
-- do not contact providers, parse quotation documents, evaluate or rank quotations, dispatch work, or activate provider ranking in this slice
+- assess whether the current eligible-provider set has enough governed response history for future reliability-based ranking
+- require at least two currently eligible providers before ranking is meaningful
+- require every current eligible provider to have sufficient 90-day response history
+- if any provider has insufficient history, keep the whole candidate set unranked
+- expose evidence sufficiency without sorting or selecting providers
+- keep `ranking_policy_enabled = false`, `ranked = false`, and `selected_provider_id = null`
+- do not activate ranking, reorder candidates, contact providers, evaluate quotations, or dispatch work in this slice
 
 Routing roadmap:
 
@@ -293,8 +304,9 @@ Routing roadmap:
 - Human-approved provider selection — complete
 - RFQ handoff foundation — complete
 - RFQ delivery / response-opportunity activation — complete
-- Provider-response ingestion — in progress
-- Deterministic ranking/reordering — only after real governed RFQ response history exists
+- Provider-response ingestion — complete
+- Ranking-readiness guard — in progress
+- Deterministic ranking/reordering — only when governed readiness is satisfied
 
 Target routing behavior:
 
