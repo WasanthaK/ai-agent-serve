@@ -19,6 +19,7 @@ from rfq_delivery import (
     confirm_rfq_delivery,
 )
 from rfq_handoff import prepare_rfq_handoff
+from rfq_response import RFQResponseConflictError, ingest_rfq_response
 
 
 def ready_analysis():
@@ -213,6 +214,54 @@ class RFQDeliveryIntegrationTests(unittest.TestCase):
                 datetime.now(timezone.utc) + timedelta(hours=24),
                 actor="operator:ci",
             )
+
+
+    def test_delivered_handoff_accepts_governed_provider_response(self):
+        request_id, provider_id, handoff_id = self.create_request_and_handoff()
+        authorize_rfq_delivery(request_id, handoff_id, actor="operator:ci")
+        confirm_rfq_delivery(
+            request_id,
+            handoff_id,
+            datetime.now(timezone.utc) + timedelta(hours=24),
+            actor="operator:ci",
+        )
+        responded_at = datetime.now(timezone.utc)
+
+        first = ingest_rfq_response(
+            request_id,
+            handoff_id,
+            "quote",
+            responded_at,
+            actor="operator:ci",
+        )
+        retry = ingest_rfq_response(
+            request_id,
+            handoff_id,
+            "quote",
+            responded_at,
+            actor="operator:ci",
+        )
+
+        self.assertEqual(first["response_id"], retry["response_id"])
+        self.assertEqual(first["provider_id"], str(provider_id))
+
+        with self.assertRaises(RFQResponseConflictError):
+            ingest_rfq_response(
+                request_id,
+                handoff_id,
+                "decline",
+                responded_at,
+                actor="operator:ci",
+            )
+
+        events = get_request_events(request_id)
+        self.assertEqual(
+            len([
+                event for event in events
+                if event["event_type"] == "rfq_provider_response_recorded"
+            ]),
+            1,
+        )
 
 
 if __name__ == "__main__":
