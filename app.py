@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -58,6 +59,15 @@ from rfq_handoff import (
     get_rfq_for_request,
     prepare_rfq_handoff,
 )
+from rfq_delivery import (
+    RFQDeliveryConflictError,
+    RFQDeliveryEligibilityError,
+    RFQDeliveryNotFoundError,
+    RFQDeliveryStateError,
+    RFQDeliveryValidationError,
+    authorize_rfq_delivery,
+    confirm_rfq_delivery,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -108,6 +118,10 @@ class ProviderSelectionDecision(BaseModel):
         default=None,
         max_length=1000,
     )
+
+
+class RFQDeliveryConfirmation(BaseModel):
+    response_deadline_at: datetime
 
 
 class CustomerReply(BaseModel):
@@ -624,6 +638,60 @@ def prepare_request_rfq_handoff(
     except (
         RFQHandoffStateError,
         RFQHandoffConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post(
+    "/requests/{request_id}/rfq-handoffs/{handoff_id}/authorize-delivery"
+)
+def authorize_request_rfq_delivery(
+    request_id: UUID,
+    handoff_id: UUID,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return authorize_rfq_delivery(
+            request_id,
+            handoff_id,
+            actor=operator.actor,
+        )
+    except RFQDeliveryNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RFQDeliveryValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        RFQDeliveryStateError,
+        RFQDeliveryEligibilityError,
+        RFQDeliveryConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post(
+    "/requests/{request_id}/rfq-handoffs/{handoff_id}/confirm-delivery"
+)
+def confirm_request_rfq_delivery(
+    request_id: UUID,
+    handoff_id: UUID,
+    confirmation: RFQDeliveryConfirmation,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return confirm_rfq_delivery(
+            request_id,
+            handoff_id,
+            confirmation.response_deadline_at,
+            actor=operator.actor,
+        )
+    except RFQDeliveryNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RFQDeliveryValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        RFQDeliveryStateError,
+        RFQDeliveryEligibilityError,
+        RFQDeliveryConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
