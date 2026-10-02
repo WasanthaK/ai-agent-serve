@@ -239,18 +239,29 @@ Completed response-reliability foundation:
 - insufficient history remains unscored
 - the factor remains inactive until real RFQ handoff generates governed production history
 
+Completed human-selection foundation:
+
+- immutable human-approved provider selection implemented and CI-verified in PR #38
+- selection is allowed only from actionable request states: `ready` or `approved`
+- selection requires the existing operator `decide` permission
+- the deterministic eligible set is rebuilt and locked inside the selection transaction
+- selected providers must belong to that current eligible set
+- the full eligible-provider snapshot and selected provider set are persisted
+- provider selection is a set, never an ordering or ranking
+- `provider_selection_recorded` is written in the same transaction
+- exact retries are idempotent and conflicting retries fail closed
+
 Current bounded work:
 
-- add immutable human-approved provider selection
-- allow selection only from actionable request states: `ready` or `approved`
-- require the existing operator `decide` permission
-- rebuild and lock the deterministic eligible set inside the selection transaction
-- require every selected provider to belong to that current eligible set
-- persist the full eligible-provider snapshot and the selected provider set
-- treat provider selection as a set, never an ordering or ranking
-- write `provider_selection_recorded` in the same transaction
-- make exact retries idempotent and conflicting retries fail closed
-- do not change request status, contact providers, dispatch work, create an RFQ, or activate ranking in this slice
+- prepare one durable RFQ snapshot from the immutable human provider selection
+- create one provider-specific prepared handoff identity for every selected provider
+- snapshot only exact service, exact area, request summary and urgency; do not copy customer name or raw message
+- require operator `decide` to prepare and `read` to retrieve
+- allow first preparation only while the request is `ready` or `approved`
+- write `rfq_handoff_prepared` in the same transaction
+- make exact retries return the original RFQ and original handoff IDs
+- keep every provider handoff in `prepared` state
+- do not contact providers, deliver RFQs, set response deadlines, create response-reliability opportunities, ingest responses, dispatch work, or activate ranking in this slice
 
 Routing roadmap:
 
@@ -258,8 +269,9 @@ Routing roadmap:
 - Routing explanation from deterministic evidence — complete
 - Ranking policy design — complete
 - Historical response-reliability evidence foundation — complete
-- Human-approved provider selection — in progress
-- RFQ handoff
+- Human-approved provider selection — complete
+- RFQ handoff foundation — in progress
+- RFQ delivery / response-opportunity activation
 - Deterministic ranking/reordering — only after real governed RFQ response history exists
 
 Target routing behavior:
@@ -271,7 +283,7 @@ Target routing behavior:
 
 ### Quotation workflow
 
-- Create structured requests for quotation
+- Create structured requests for quotation — foundation in progress
 - Collect provider responses
 - Normalize different quotation formats
 - Detect missing scope, exclusions and terms
