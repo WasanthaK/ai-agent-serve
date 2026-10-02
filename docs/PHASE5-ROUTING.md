@@ -101,7 +101,7 @@ The policy catalogue currently permits only future operational factors for which
 - `response_reliability`
 - `service_quality`
 
-No factor is active today because the required comparable evidence is not yet implemented.
+The first governed factor is now defined as `response_reliability`, but it remains inactive in the current ranking policy. This slice adds the evidence persistence and deterministic metric needed for that factor; production ranking still remains disabled until real RFQ/provider-response history exists and a scoring implementation is separately reviewed.
 
 Explicitly prohibited ranking inputs include:
 
@@ -113,13 +113,36 @@ Explicitly prohibited ranking inputs include:
 
 Provider selection remains `human_only`. Ranking ties require `human_review`; the system must not silently break ties using IDs, creation order or model judgment.
 
-This slice defines no score calculation and performs no ranking.
+### Historical response reliability evidence
+
+`provider_response_reliability.py` records provider response opportunities and provider responses as separate durable records.
+
+The metric intentionally measures responsiveness rather than willingness to quote:
+
+- an on-time quote counts as an on-time response;
+- an on-time decline also counts as an on-time response;
+- a late response is completed history but is not on time;
+- no response after the deadline is completed history and is not on time;
+- an opportunity whose deadline has not passed and has no response is still open and is excluded.
+
+The v1 evidence policy uses:
+
+- a rolling 90-day history window;
+- a minimum of 5 completed opportunities;
+- an integer reliability scale from 0 to 10,000 basis points;
+- `reliability_bps = floor(on_time_responses * 10000 / completed_opportunities)`.
+
+Providers with fewer than five completed opportunities return `insufficient_history` and no reliability score. They are not assigned a low score.
+
+The provider-response opportunity ID is intentionally opaque in this slice. The future RFQ handoff can bind it to the provider-specific RFQ invitation identity without changing the reliability calculation contract.
+
+The current ranking policy remains disabled. This slice computes evidence only; it does not reorder candidates or select a provider.
 
 ## Current exclusions
 
 This routing stage does not yet include:
 
-- executable provider ranking or scoring
+- executable provider ranking/reordering
 - automatic provider selection
 - RFQ delivery
 - provider contact
@@ -143,3 +166,5 @@ Unit tests prove:
 The PostgreSQL integration proof creates two otherwise matching providers, verifies that a non-compliant provider is excluded, and verifies that the surviving provider receives only the five deterministic eligibility explanations.
 
 Ranking-policy unit tests additionally prove that ranking is disabled by default, eligibility gates cannot become score factors, automatic selection and arbitrary tie-breaking are rejected, active weights must total 100, and every enabled factor must carry complete governance metadata.
+
+The response-reliability PostgreSQL proof verifies a 90-day history window, exclusion of open opportunities, exclusion of stale history, on-time quote and decline handling, late/no-response handling, deterministic basis-point calculation, idempotent response recording, and fail-closed `insufficient_history` behavior below five completed opportunities.
