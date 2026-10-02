@@ -75,6 +75,13 @@ from rfq_response import (
     RFQResponseValidationError,
     ingest_rfq_response,
 )
+from structured_quotation import (
+    StructuredQuotationConflictError,
+    StructuredQuotationNotFoundError,
+    StructuredQuotationStateError,
+    StructuredQuotationValidationError,
+    record_structured_quotation,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -134,6 +141,16 @@ class RFQDeliveryConfirmation(BaseModel):
 class RFQProviderResponse(BaseModel):
     response_kind: str = Field(min_length=1, max_length=20)
     responded_at: datetime
+
+
+class StructuredQuotationRecord(BaseModel):
+    currency: str = Field(min_length=3, max_length=3)
+    total_amount_minor: int = Field(ge=0)
+    scope_text: str = Field(min_length=1, max_length=5000)
+    submitted_at: datetime
+    availability_text: Optional[str] = Field(default=None, max_length=5000)
+    exclusions_text: Optional[str] = Field(default=None, max_length=5000)
+    terms_text: Optional[str] = Field(default=None, max_length=5000)
 
 
 class CustomerReply(BaseModel):
@@ -732,6 +749,39 @@ def record_request_rfq_provider_response(
     except (
         RFQResponseStateError,
         RFQResponseConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post(
+    "/requests/{request_id}/rfq-handoffs/{handoff_id}/structured-quotation"
+)
+def record_request_structured_quotation(
+    request_id: UUID,
+    handoff_id: UUID,
+    quotation: StructuredQuotationRecord,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return record_structured_quotation(
+            request_id,
+            handoff_id,
+            currency=quotation.currency,
+            total_amount_minor=quotation.total_amount_minor,
+            scope_text=quotation.scope_text,
+            submitted_at=quotation.submitted_at,
+            availability_text=quotation.availability_text,
+            exclusions_text=quotation.exclusions_text,
+            terms_text=quotation.terms_text,
+            actor=operator.actor,
+        )
+    except StructuredQuotationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except StructuredQuotationValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        StructuredQuotationStateError,
+        StructuredQuotationConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
