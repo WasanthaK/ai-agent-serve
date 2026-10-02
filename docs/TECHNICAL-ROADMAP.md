@@ -251,17 +251,31 @@ Completed human-selection foundation:
 - `provider_selection_recorded` is written in the same transaction
 - exact retries are idempotent and conflicting retries fail closed
 
+Completed RFQ handoff foundation:
+
+- durable RFQ snapshot preparation implemented and CI-verified in PR #39
+- one stable provider-specific prepared handoff identity is created per selected provider
+- RFQ snapshots contain exact service, exact area, request summary and urgency only
+- customer name and raw customer message are not copied into the RFQ foundation record
+- preparation requires operator `decide`; retrieval requires `read`
+- first preparation is allowed only while the request is `ready` or `approved`
+- `rfq_handoff_prepared` is written in the same transaction
+- exact retries return the original RFQ and original handoff IDs
+- preparation creates no response-reliability opportunity
+
 Current bounded work:
 
-- prepare one durable RFQ snapshot from the immutable human provider selection
-- create one provider-specific prepared handoff identity for every selected provider
-- snapshot only exact service, exact area, request summary and urgency; do not copy customer name or raw message
-- require operator `decide` to prepare and `read` to retrieve
-- allow first preparation only while the request is `ready` or `approved`
-- write `rfq_handoff_prepared` in the same transaction
-- make exact retries return the original RFQ and original handoff IDs
-- keep every provider handoff in `prepared` state
-- do not contact providers, deliver RFQs, set response deadlines, create response-reliability opportunities, ingest responses, dispatch work, or activate ranking in this slice
+- add software-only RFQ delivery authorization and confirmation state
+- require operator `decide` for both transitions
+- re-check current provider eligibility before authorization
+- move provider handoff from `prepared` to `authorized` without provider contact
+- require explicit timezone-aware response deadline for confirmation
+- re-check provider eligibility again at confirmation
+- move handoff from `authorized` to `delivered`
+- atomically create the response-reliability opportunity using handoff ID as opportunity ID
+- write `rfq_delivery_authorized` and `rfq_delivery_confirmed`
+- make exact retries idempotent and conflicting deadlines fail closed
+- do not perform live email/WhatsApp/SMS delivery, ingest provider responses, dispatch work, or activate ranking in this slice
 
 Routing roadmap:
 
@@ -270,8 +284,9 @@ Routing roadmap:
 - Ranking policy design — complete
 - Historical response-reliability evidence foundation — complete
 - Human-approved provider selection — complete
-- RFQ handoff foundation — in progress
-- RFQ delivery / response-opportunity activation
+- RFQ handoff foundation — complete
+- RFQ delivery / response-opportunity activation — in progress
+- Provider-response ingestion
 - Deterministic ranking/reordering — only after real governed RFQ response history exists
 
 Target routing behavior:

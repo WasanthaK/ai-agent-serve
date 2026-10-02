@@ -44,6 +44,77 @@ def _validate_uuid(value, field_name: str):
     return value
 
 
+
+def record_response_opportunity_with_cursor(
+    cursor,
+    provider_id,
+    opportunity_id,
+    offered_at: datetime,
+    response_deadline_at: datetime,
+):
+    """Persist one response opportunity inside an existing transaction."""
+
+    _validate_uuid(provider_id, "provider_id")
+    _validate_uuid(opportunity_id, "opportunity_id")
+    offered_at = _validate_timestamp(offered_at, "offered_at")
+    response_deadline_at = _validate_timestamp(
+        response_deadline_at,
+        "response_deadline_at",
+    )
+    if response_deadline_at <= offered_at:
+        raise ProviderResponseReliabilityValidationError(
+            "response_deadline_at must be after offered_at"
+        )
+
+    observation_id = uuid.uuid4()
+    cursor.execute(
+        """
+        INSERT INTO provider_response_opportunities (
+            id,
+            provider_id,
+            opportunity_id,
+            offered_at,
+            response_deadline_at
+        )
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (provider_id, opportunity_id) DO NOTHING
+        RETURNING id, provider_id, opportunity_id, offered_at,
+                  response_deadline_at, created_at
+        """,
+        (
+            observation_id,
+            provider_id,
+            opportunity_id,
+            offered_at,
+            response_deadline_at,
+        ),
+    )
+    created = cursor.fetchone()
+    if created is not None:
+        return created
+
+    cursor.execute(
+        """
+        SELECT id, provider_id, opportunity_id, offered_at,
+               response_deadline_at, created_at
+        FROM provider_response_opportunities
+        WHERE provider_id = %s AND opportunity_id = %s
+        """,
+        (provider_id, opportunity_id),
+    )
+    existing = cursor.fetchone()
+
+    if (
+        existing["offered_at"] != offered_at
+        or existing["response_deadline_at"] != response_deadline_at
+    ):
+        raise ProviderResponseReliabilityConflictError(
+            "Response opportunity already exists with different timing"
+        )
+
+    return existing
+
+
 def record_response_opportunity(
     provider_id,
     opportunity_id,
@@ -68,56 +139,15 @@ def record_response_opportunity(
             "response_deadline_at must be after offered_at"
         )
 
-    observation_id = uuid.uuid4()
-
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                INSERT INTO provider_response_opportunities (
-                    id,
-                    provider_id,
-                    opportunity_id,
-                    offered_at,
-                    response_deadline_at
-                )
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (provider_id, opportunity_id) DO NOTHING
-                RETURNING id, provider_id, opportunity_id, offered_at,
-                          response_deadline_at, created_at
-                """,
-                (
-                    observation_id,
-                    provider_id,
-                    opportunity_id,
-                    offered_at,
-                    response_deadline_at,
-                ),
+            return record_response_opportunity_with_cursor(
+                cur,
+                provider_id,
+                opportunity_id,
+                offered_at,
+                response_deadline_at,
             )
-            created = cur.fetchone()
-            if created is not None:
-                return created
-
-            cur.execute(
-                """
-                SELECT id, provider_id, opportunity_id, offered_at,
-                       response_deadline_at, created_at
-                FROM provider_response_opportunities
-                WHERE provider_id = %s AND opportunity_id = %s
-                """,
-                (provider_id, opportunity_id),
-            )
-            existing = cur.fetchone()
-
-    if (
-        existing["offered_at"] != offered_at
-        or existing["response_deadline_at"] != response_deadline_at
-    ):
-        raise ProviderResponseReliabilityConflictError(
-            "Response opportunity already exists with different timing"
-        )
-
-    return existing
 
 
 def record_provider_response(
