@@ -77,9 +77,9 @@ RESPONSE_RELIABILITY_FACTOR_POLICY = RankingFactorPolicy(
 
 
 CURRENT_PROVIDER_RANKING_POLICY = ProviderRankingPolicy(
-    version="1.0.0",
-    enabled=False,
-    factors=(),
+    version="1.1.0",
+    enabled=True,
+    factors=(RESPONSE_RELIABILITY_FACTOR_POLICY,),
 )
 
 
