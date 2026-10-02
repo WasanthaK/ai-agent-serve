@@ -465,6 +465,48 @@ def list_available_approved_providers_for_service_and_area(
             return cur.fetchall()
 
 
+def list_eligible_providers_for_service_and_area_with_cursor(
+    cursor,
+    service_slug: str,
+    area_key: str,
+    *,
+    lock_rows: bool = False,
+):
+    """Return fully eligible providers using the caller's transaction.
+
+    Selection code may request row locks so the exact eligibility snapshot used for
+    a human decision cannot change until that decision is durably recorded.
+    """
+
+    service_slug = validate_service_slug(service_slug)
+    area_key = validate_area_key(area_key)
+    lock_clause = "FOR SHARE OF p, c, a, v, k" if lock_rows else ""
+
+    cursor.execute(
+        f"""
+        SELECT p.*
+        FROM providers AS p
+        INNER JOIN provider_service_capabilities AS c
+            ON c.provider_id = p.id
+        INNER JOIN provider_coverage_areas AS a
+            ON a.provider_id = p.id
+        INNER JOIN provider_availability AS v
+            ON v.provider_id = p.id
+        INNER JOIN provider_compliance AS k
+            ON k.provider_id = p.id
+        WHERE p.approval_status = 'approved'
+          AND c.service_slug = %s
+          AND a.area_key = %s
+          AND v.availability_status = 'available'
+          AND k.compliance_status = 'compliant'
+        ORDER BY p.created_at ASC, p.id ASC
+        {lock_clause}
+        """,
+        (service_slug, area_key),
+    )
+    return cursor.fetchall()
+
+
 def list_eligible_providers_for_service_and_area(
     service_slug: str,
     area_key: str,
@@ -475,30 +517,10 @@ def list_eligible_providers_for_service_and_area(
     only; it does not rank, select, route, or infer compliance from evidence.
     """
 
-    service_slug = validate_service_slug(service_slug)
-    area_key = validate_area_key(area_key)
-
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT p.*
-                FROM providers AS p
-                INNER JOIN provider_service_capabilities AS c
-                    ON c.provider_id = p.id
-                INNER JOIN provider_coverage_areas AS a
-                    ON a.provider_id = p.id
-                INNER JOIN provider_availability AS v
-                    ON v.provider_id = p.id
-                INNER JOIN provider_compliance AS k
-                    ON k.provider_id = p.id
-                WHERE p.approval_status = 'approved'
-                  AND c.service_slug = %s
-                  AND a.area_key = %s
-                  AND v.availability_status = 'available'
-                  AND k.compliance_status = 'compliant'
-                ORDER BY p.created_at ASC, p.id ASC
-                """,
-                (service_slug, area_key),
+            return list_eligible_providers_for_service_and_area_with_cursor(
+                cur,
+                service_slug,
+                area_key,
             )
-            return cur.fetchall()
