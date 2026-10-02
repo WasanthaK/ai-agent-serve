@@ -302,15 +302,24 @@ Completed deterministic response-reliability ranking:
 - ties require human review
 - provider selection remains human-only with no automatic selection
 
+Completed normalized quote foundation:
+
+- immutable normalized commercial quote persistence implemented and CI-verified in PR #45
+- normalization requires a delivered RFQ handoff and persisted provider `quote` response
+- normalized fields include amount, currency, scope, exclusions, terms and optional availability/duration/validity
+- writes require operator `decide`; reads require `read`
+- exact retries are idempotent and conflicting normalized data fails closed
+- no document parsing, model extraction, comparison, recommendation, or award authority was introduced
+
 Current bounded work:
 
-- add one immutable normalized commercial quote record for each governed provider `quote` response
-- require a delivered RFQ handoff and persisted quote response before normalization
-- capture amount in minor units, three-letter currency, scope summary, exclusions and terms
-- optionally capture available-from date, estimated duration and validity expiry
-- require operator `decide` to write and `read` to retrieve
-- make exact retries idempotent and conflicting normalized data fail closed
-- do not parse quotation documents, use model extraction, compare quotes, recommend providers, or award work in this slice
+- deterministically assess whether a normalized quote is complete enough for comparison
+- require explicit exclusions and terms disclosure for comparison readiness
+- flag expired quotes as blocking human-review conditions
+- report missing availability, duration and validity as informational gaps without inventing service-specific requirements
+- expose `complete`, `incomplete`, or `needs_human_review`
+- keep `evaluated = false`, `recommended = false`, and `selected = false`
+- do not compare providers, score quotes, recommend a winner, or award work in this slice
 
 Routing roadmap:
 
@@ -336,8 +345,8 @@ Target routing behavior:
 
 - Create structured requests for quotation — foundation complete
 - Collect provider responses — structured response ingestion complete
-- Normalize different quotation formats — in progress
-- Detect missing scope, exclusions and terms
+- Normalize different quotation formats — foundation complete
+- Detect missing scope, exclusions and terms — in progress
 - Compare price, availability, scope and risk
 - Present recommendations for human approval
 

@@ -304,6 +304,34 @@ Write access requires operator `decide`; retrieval requires `read`.
 
 This slice performs no quotation-document parsing, model extraction, quote comparison, recommendation, provider selection, or award.
 
+## Quote completeness validation
+
+`quote_completeness.assess_quote_completeness(request_id, handoff_id)` evaluates one normalized quote using deterministic rules only.
+
+Comparison readiness requires:
+
+- a normalized price and currency;
+- a non-empty scope summary;
+- explicit exclusions disclosure; and
+- explicit terms disclosure.
+
+An expired quote is not comparison-ready and returns `needs_human_review`.
+
+Missing availability date, estimated duration, or validity expiry are reported as informational gaps. They do not automatically fail every service because service-specific completeness policy has not yet been defined.
+
+The result never evaluates commercial merit. It returns:
+
+- `status = complete | incomplete | needs_human_review`;
+- `comparison_ready`;
+- exact missing required fields;
+- informational gaps;
+- blocking reasons;
+- `evaluated = false`;
+- `recommended = false`; and
+- `selected = false`.
+
+The read-only completeness endpoint requires operator `read`.
+
 ## Current exclusions
 
 This routing stage does not yet include:
@@ -346,3 +374,6 @@ The ranking-readiness PostgreSQL proof verifies that readiness is derived from t
 
 
 The normalized-quote PostgreSQL proof verifies that only delivered handoffs with a governed quote response can be normalized, exact retries are idempotent, conflicting normalized data fails closed, decline responses cannot become quotes, and one audit event is recorded transactionally.
+
+
+The quote-completeness PostgreSQL proof verifies deterministic completeness against persisted normalized quote data, explicit missing-field reporting, comparison blocking for missing required disclosures, and preservation of the no-evaluation/no-recommendation/no-selection boundary.
