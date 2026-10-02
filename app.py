@@ -87,6 +87,10 @@ from quote_completeness import (
     QuoteCompletenessNotFoundError,
     assess_quote_completeness,
 )
+from quote_comparison import (
+    QuoteComparisonNotReadyError,
+    compare_request_quotes,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -824,6 +828,19 @@ def retrieve_quote_completeness(
         return assess_quote_completeness(request_id, handoff_id)
     except QuoteCompletenessNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/quote-comparison",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_quote_comparison(request_id: UUID):
+    try:
+        return compare_request_quotes(request_id)
+    except QuoteComparisonNotReadyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

@@ -332,6 +332,31 @@ The result never evaluates commercial merit. It returns:
 
 The read-only completeness endpoint requires operator `read`.
 
+## Deterministic quote comparison
+
+`quote_comparison.compare_request_quotes(request_id)` compares only normalized quotes from the same request that pass deterministic completeness validation.
+
+The comparison:
+
+- requires at least two comparison-ready quotes;
+- compares price only when every ready quote uses the same currency;
+- never performs currency conversion or fetches an exchange rate;
+- identifies the lowest price factually when price is comparable;
+- identifies the earliest available date only when every ready quote provides availability;
+- identifies the shortest duration only when every ready quote provides duration;
+- preserves scope, exclusions and terms as side-by-side evidence rather than scoring them; and
+- reports any non-comparable dimension through `comparison_gaps`.
+
+Quotes that fail completeness are excluded from the comparison result with their exact completeness status, missing required fields and blocking reasons.
+
+The result always returns:
+
+- `overall_winner_quote_id = null`;
+- `recommended_quote_id = null`; and
+- `selected_quote_id = null`.
+
+The comparison endpoint is read-only and requires operator `read`.
+
 ## Current exclusions
 
 This routing stage does not yet include:
@@ -377,3 +402,6 @@ The normalized-quote PostgreSQL proof verifies that only delivered handoffs with
 
 
 The quote-completeness PostgreSQL proof verifies deterministic completeness against persisted normalized quote data, explicit missing-field reporting, comparison blocking for missing required disclosures, and preservation of the no-evaluation/no-recommendation/no-selection boundary.
+
+
+The deterministic quote-comparison PostgreSQL proof verifies comparison across two governed, normalized, comparison-ready quotes from one request; same-currency price comparison; factual availability/duration comparisons; and preservation of the no-winner/no-recommendation/no-selection boundary.
