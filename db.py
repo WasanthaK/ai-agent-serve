@@ -220,6 +220,24 @@ def record_event(
             )
 
 
+def record_event_in_transaction(
+    cursor,
+    request_id,
+    event_type,
+    actor="agent",
+    details=None,
+):
+    """Record an audit event inside an existing transaction."""
+
+    return _record_event(
+        cursor,
+        request_id=request_id,
+        event_type=event_type,
+        actor=actor,
+        details=details,
+    )
+
+
 def update_request_status(
     request_id,
     new_status,
