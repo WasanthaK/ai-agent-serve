@@ -385,6 +385,33 @@ class RouteAuthorizationTests(unittest.TestCase):
             )
             self.assertEqual(readable.status_code, 200)
 
+    def test_quote_comparison_requires_read_permission(self):
+        result = {
+            "request_id": str(self.request_id),
+            "status": "comparison_available",
+            "quote_count": 2,
+            "overall_winner_quote_id": None,
+            "recommended_quote_id": None,
+            "selected_quote_id": None,
+        }
+
+        with patch.object(
+            api,
+            "compare_request_quotes",
+            return_value=result,
+        ) as compare:
+            missing = self.client.get(
+                f"/requests/{self.request_id}/quote-comparison"
+            )
+            self.assertIn(missing.status_code, (401, 403))
+            compare.assert_not_called()
+
+            readable = self.client.get(
+                f"/requests/{self.request_id}/quote-comparison",
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(readable.status_code, 200)
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)
