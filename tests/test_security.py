@@ -180,6 +180,58 @@ class RouteAuthorizationTests(unittest.TestCase):
         self.assertEqual(event["route"], "/requests/{request_id}/approve")
         self.assertNotIn(body_secret, self.audit_log.call_args.args[0])
 
+    def test_provider_selection_requires_decide_permission(self):
+        provider_id = uuid4()
+        payload = {
+            "service_slug": "plumbing",
+            "area_key": "bn:brunei-muara",
+            "provider_ids": [str(provider_id)],
+            "reason": "Human routing decision",
+        }
+
+        with patch.object(
+            api,
+            "select_providers_for_request",
+            return_value={
+                "request_id": str(self.request_id),
+                "selected_provider_ids": [str(provider_id)],
+                "selection_authority": "human",
+                "ranked": False,
+            },
+        ) as select:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/provider-selection",
+                json=payload,
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            select.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/provider-selection",
+                json=payload,
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                select.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
+        with patch.object(
+            api,
+            "get_provider_selection",
+            return_value={
+                "request_id": str(self.request_id),
+                "selected_provider_ids": [str(provider_id)],
+            },
+        ):
+            readable = self.client.get(
+                f"/requests/{self.request_id}/provider-selection",
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(readable.status_code, 200)
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)
