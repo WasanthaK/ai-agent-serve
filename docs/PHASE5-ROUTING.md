@@ -357,6 +357,28 @@ The result always returns:
 
 The comparison endpoint is read-only and requires operator `read`.
 
+## Human quote recommendation
+
+A quote recommendation is an explicit human operator decision grounded in the current deterministic comparison set.
+
+`POST /requests/{request_id}/quote-recommendation` requires operator `decide`. Retrieval requires `read`.
+
+A recommendation:
+
+- must reference a normalized quote in the current comparison-ready set;
+- requires non-empty human rationale;
+- snapshots deterministic comparison facts at decision time;
+- is immutable and idempotent for an exact retry; and
+- records `quote_recommendation_recorded` transactionally.
+
+The record explicitly states:
+
+- `recommendation_authority = human`;
+- `award_created = false`; and
+- `provider_contacted = false`.
+
+Recommendation does not change request status, provider state, or RFQ state and does not constitute an award or dispatch instruction.
+
 ## Current exclusions
 
 This routing stage does not yet include:
@@ -405,3 +427,6 @@ The quote-completeness PostgreSQL proof verifies deterministic completeness agai
 
 
 The deterministic quote-comparison PostgreSQL proof verifies comparison across two governed, normalized, comparison-ready quotes from one request; same-currency price comparison; factual availability/duration comparisons; and preservation of the no-winner/no-recommendation/no-selection boundary.
+
+
+The human quote-recommendation PostgreSQL proof verifies that recommendations are restricted to the current comparison-ready set, exact retries are idempotent, conflicting retries fail closed, one audit event is written, and recommendation creates neither an award nor provider contact.
