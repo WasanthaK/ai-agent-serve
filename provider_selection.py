@@ -13,6 +13,8 @@ from db import get_connection, record_event_in_transaction
 from provider_directory import (
     ProviderDirectoryValidationError,
     list_eligible_providers_for_service_and_area_with_cursor,
+    validate_area_key,
+    validate_service_slug,
 )
 
 
@@ -170,6 +172,8 @@ def select_providers_for_request(
     reason = _normalize_reason(reason)
 
     try:
+        service_slug = validate_service_slug(service_slug)
+        area_key = validate_area_key(area_key)
         with get_connection() as conn:
             with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
