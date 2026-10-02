@@ -379,6 +379,31 @@ The record explicitly states:
 
 Recommendation does not change request status, provider state, or RFQ state and does not constitute an award or dispatch instruction.
 
+## Human quote award
+
+A quote award is an explicit human commercial decision tied to the existing human recommendation.
+
+`POST /requests/{request_id}/quote-award` requires operator `decide`. Retrieval requires `read`.
+
+Before recording an award, the system:
+
+- requires the referenced recommendation to belong to the request;
+- verifies the recommended normalized quote still exists;
+- re-checks that the quote is still comparison-ready;
+- reconstructs current provider eligibility for the RFQ's exact service and area inside the award transaction; and
+- rejects the award if the provider is no longer currently eligible.
+
+The award is immutable and idempotent for an exact retry. Conflicting retries fail closed.
+
+The award result explicitly states:
+
+- `award_authority = human`;
+- `provider_contacted = false`;
+- `dispatch_created = false`; and
+- `request_status_changed = false`.
+
+This slice creates decision evidence only. Provider notification, dispatch and request-state transition remain separate future actions.
+
 ## Current exclusions
 
 This routing stage does not yet include:
@@ -430,3 +455,6 @@ The deterministic quote-comparison PostgreSQL proof verifies comparison across t
 
 
 The human quote-recommendation PostgreSQL proof verifies that recommendations are restricted to the current comparison-ready set, exact retries are idempotent, conflicting retries fail closed, one audit event is written, and recommendation creates neither an award nor provider contact.
+
+
+The human quote-award PostgreSQL proof extends the recommendation flow through award, verifies that a newly non-compliant recommended provider blocks award until eligibility is restored, proves exact retry idempotency and conflicting retry rejection, and verifies one audit event with no provider contact, dispatch, or request-state mutation.
