@@ -319,16 +319,25 @@ Completed quote completeness validation:
 - missing availability, duration and validity are reported as informational gaps
 - completeness never evaluates merit, recommends, selects, or awards
 
+Completed deterministic quote comparison:
+
+- factual quote comparison implemented and CI-verified in PR #47
+- only comparison-ready normalized quotes from the same request are compared
+- mixed currencies are never price-compared and no FX conversion is performed
+- price, availability and duration facts are surfaced only when comparable
+- scope, exclusions and terms remain side-by-side evidence without scoring
+- no overall winner, recommendation, selection or award is produced automatically
+
 Current bounded work:
 
-- compare only comparison-ready normalized quotes belonging to the same request
-- require at least two comparison-ready quotes
-- compare price only when every ready quote uses the same currency; do not perform FX conversion
-- identify earliest available date only when availability is present for every ready quote
-- identify shortest duration only when duration is present for every ready quote
-- present scope, exclusions and terms side-by-side as factual evidence without scoring them
-- exclude incomplete or blocked quotes while reporting their exact exclusion reasons
-- never produce an overall winner, recommendation, provider selection, or award in this slice
+- let a human operator record one immutable quote recommendation for a request
+- require the recommended quote to belong to the current comparison-ready set
+- require explicit human rationale
+- snapshot the deterministic comparison facts used at decision time
+- require operator `decide` to record and `read` to retrieve
+- make exact retries idempotent and conflicting recommendations fail closed
+- write `quote_recommendation_recorded` transactionally
+- do not create an award, contact a provider, change request status, or dispatch work in this slice
 
 Routing roadmap:
 
@@ -356,8 +365,8 @@ Target routing behavior:
 - Collect provider responses — structured response ingestion complete
 - Normalize different quotation formats — foundation complete
 - Detect missing scope, exclusions and terms — complete
-- Compare price, availability, scope and risk — in progress
-- Present recommendations for human approval
+- Compare price, availability, scope and risk — deterministic comparison complete
+- Present recommendations for human approval — in progress
 
 Purchase-order creation remains outside the initial scope.
 
