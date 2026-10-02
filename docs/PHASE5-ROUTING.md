@@ -196,7 +196,7 @@ The provider-specific handoff ID is the intended future response-opportunity ide
 - create a `provider_response_opportunities` row; or
 - start response-reliability timing.
 
-Those actions belong to a separately authorized delivery slice.
+Those actions belong to a separately authorized delivery slice. That delivery slice must re-check current provider eligibility immediately before contact; the immutable human selection snapshot is historical authority evidence, not a guarantee that a provider remains eligible later.
 
 RFQ preparation writes `rfq_handoff_prepared` in the same transaction. Exact retries return the original RFQ and the original provider handoff IDs; they do not create duplicate handoffs or duplicate audit events.
 
