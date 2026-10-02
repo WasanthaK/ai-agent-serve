@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS rfqs (
     request_id UUID NOT NULL UNIQUE
         REFERENCES agent_requests(id) ON DELETE CASCADE,
     selection_id UUID NOT NULL UNIQUE
-        REFERENCES provider_selection_decisions(id) ON DELETE RESTRICT,
+        REFERENCES provider_selection_decisions(id) ON DELETE CASCADE,
     service_slug TEXT NOT NULL,
     area_key TEXT NOT NULL,
     scope_summary TEXT NOT NULL,
