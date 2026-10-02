@@ -83,6 +83,10 @@ from quote_normalization import (
     get_normalized_quote,
     normalize_structured_quote,
 )
+from quote_completeness import (
+    QuoteCompletenessNotFoundError,
+    assess_quote_completeness,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -806,6 +810,22 @@ def record_normalized_quote(
         QuoteNormalizationConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/rfq-handoffs/{handoff_id}/quote-completeness",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_quote_completeness(
+    request_id: UUID,
+    handoff_id: UUID,
+):
+    try:
+        return assess_quote_completeness(request_id, handoff_id)
+    except QuoteCompletenessNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/requests/{request_id}/approve")
