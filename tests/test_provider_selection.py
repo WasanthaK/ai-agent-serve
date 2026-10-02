@@ -44,15 +44,17 @@ class ProviderSelectionValidationTests(unittest.TestCase):
                         actor="operator:test",
                     )
 
-    def test_selection_requires_a_human_actor(self):
-        with self.assertRaises(ProviderSelectionValidationError):
-            select_providers_for_request(
-                uuid4(),
-                "plumbing",
-                "bn:brunei-muara",
-                [uuid4()],
-                actor=" ",
-            )
+    def test_selection_requires_a_human_operator_actor(self):
+        for actor in (" ", "agent", "model:routing"):
+            with self.subTest(actor=actor):
+                with self.assertRaises(ProviderSelectionValidationError):
+                    select_providers_for_request(
+                        uuid4(),
+                        "plumbing",
+                        "bn:brunei-muara",
+                        [uuid4()],
+                        actor=actor,
+                    )
 
 
 if __name__ == "__main__":
