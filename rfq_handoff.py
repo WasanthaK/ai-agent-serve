@@ -135,6 +135,20 @@ def prepare_rfq_handoff(request_id, *, actor: str):
 
             if request is None:
                 raise RFQHandoffNotFoundError("Request not found")
+
+            cur.execute(
+                """
+                SELECT *
+                FROM rfqs
+                WHERE request_id = %s
+                FOR UPDATE
+                """,
+                (request_id,),
+            )
+            existing = cur.fetchone()
+            if existing is not None:
+                return _rfq_result(cur, existing)
+
             if request["status"] not in RFQ_PREPARABLE_REQUEST_STATUSES:
                 raise RFQHandoffStateError(
                     "RFQ preparation requires request status ready or approved"
@@ -173,24 +187,6 @@ def prepare_rfq_handoff(request_id, *, actor: str):
                 raise RFQHandoffConflictError(
                     "Human provider selection contains no providers"
                 )
-
-            cur.execute(
-                """
-                SELECT *
-                FROM rfqs
-                WHERE request_id = %s
-                FOR UPDATE
-                """,
-                (request_id,),
-            )
-            existing = cur.fetchone()
-
-            if existing is not None:
-                if existing["selection_id"] != selection["id"]:
-                    raise RFQHandoffConflictError(
-                        "RFQ is linked to a different provider selection"
-                    )
-                return _rfq_result(cur, existing)
 
             scope_summary = request["summary"].strip()
             urgency = request["urgency"].strip()
