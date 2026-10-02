@@ -47,6 +47,13 @@ class ProviderRankingPolicyTests(unittest.TestCase):
         self.assertEqual(CURRENT_PROVIDER_RANKING_POLICY.factors, ())
         self.assertFalse(CURRENT_PROVIDER_RANKING_POLICY.enabled)
 
+        proposed = ProviderRankingPolicy(
+            version="1.0.0",
+            enabled=True,
+            factors=(factor_policy,),
+        )
+        self.assertIs(validate_provider_ranking_policy(proposed), proposed)
+
     def test_enabled_policy_requires_governed_factors_totaling_100(self):
         policy = ProviderRankingPolicy(
             version="1.0.0",
