@@ -76,7 +76,7 @@ Candidate construction and explanation register no write-capable model tool. Hum
 
 ## Ranking-policy governance
 
-Provider ranking remains disabled by default.
+Provider ranking is enabled only for the governed response-reliability factor and remains runtime-gated by ranking readiness.
 
 The current provider facts — approval, service capability, exact coverage area, availability and compliance — are eligibility gates. They must not be converted into ranking points because every candidate has already passed them.
 
@@ -101,7 +101,7 @@ The policy catalogue currently permits only future operational factors for which
 - `response_reliability`
 - `service_quality`
 
-The first governed factor is now defined as `response_reliability`, but it remains inactive in the current ranking policy. This slice adds the evidence persistence and deterministic metric needed for that factor; production ranking still remains disabled until real RFQ/provider-response history exists and a scoring implementation is separately reviewed.
+The active ranking policy uses only `response_reliability` at 100% weight. Execution still fails closed unless the readiness guard proves at least two current eligible providers and sufficient governed history for every current candidate.
 
 Explicitly prohibited ranking inputs include:
 
@@ -136,7 +136,7 @@ Providers with fewer than five completed opportunities return `insufficient_hist
 
 The provider-response opportunity ID is intentionally opaque in this slice. The future RFQ handoff can bind it to the provider-specific RFQ invitation identity without changing the reliability calculation contract.
 
-The current ranking policy remains disabled. This slice computes evidence only; it does not reorder candidates or select a provider.
+The response-reliability metric is the sole active ranking factor. Providers with insufficient history remain unscored and cause the readiness guard to fail closed.
 
 ## Human-approved provider selection
 
@@ -266,13 +266,27 @@ A ready result still states:
 - `ranked = false`; and
 - `selected_provider_id = null`.
 
-This is evidence sufficiency only. It does not activate the ranking policy or reorder providers.
+This readiness guard is the mandatory precondition for executable ranking.
+
+## Deterministic response-reliability ranking
+
+`provider_ranking.rank_providers_by_response_reliability(service_slug, area_key)` executes only after the readiness guard succeeds.
+
+The ranking:
+
+- orders providers by `response_reliability_bps`, highest first;
+- uses no provider ID, creation order, model preference or hidden commercial factor;
+- gives equal scores the same `rank_position`;
+- does not treat presentation order within a tie as a tie-break;
+- sets `requires_human_review = true` when any tie exists; and
+- always returns `selected_provider_id = null`.
+
+Provider selection remains human-only and is not modified by ranking.
 
 ## Current exclusions
 
 This routing stage does not yet include:
 
-- executable provider ranking/reordering
 - automatic provider selection
 - live RFQ delivery transport
 - provider contact by this service
@@ -295,7 +309,7 @@ Unit tests prove:
 
 The PostgreSQL integration proof creates two otherwise matching providers, verifies that a non-compliant provider is excluded, and verifies that the surviving provider receives only the five deterministic eligibility explanations.
 
-Ranking-policy unit tests additionally prove that ranking is disabled by default, eligibility gates cannot become score factors, automatic selection and arbitrary tie-breaking are rejected, active weights must total 100, and every enabled factor must carry complete governance metadata.
+Ranking-policy unit tests prove that only governed response reliability is active, eligibility gates cannot become score factors, automatic selection and arbitrary tie-breaking are rejected, active weights total 100, and every enabled factor carries complete governance metadata.
 
 The response-reliability PostgreSQL proof verifies a 90-day history window, exclusion of open opportunities, exclusion of stale history, on-time quote and decline handling, late/no-response handling, deterministic basis-point calculation, idempotent response recording, and fail-closed `insufficient_history` behavior below five completed opportunities.
 
@@ -307,4 +321,4 @@ The RFQ-delivery PostgreSQL proof verifies eligibility revalidation before autho
 
 The provider-response ingestion PostgreSQL proof verifies that only delivered handoffs accept quote/decline evidence, response timestamps cannot predate delivery, exact retries are idempotent, conflicting evidence fails closed, and the audit event is transactional.
 
-The ranking-readiness PostgreSQL proof verifies that readiness is derived from the current deterministic eligible-provider set plus persisted response history, that one insufficient-history provider blocks the whole set, and that sufficient history only marks readiness while ranking remains disabled and unperformed.
+The ranking-readiness PostgreSQL proof verifies that readiness is derived from the current deterministic eligible-provider set plus persisted response history and that one insufficient-history provider blocks the whole set. The same PostgreSQL proof now executes deterministic reliability ranking after readiness succeeds and verifies that no provider is automatically selected.
