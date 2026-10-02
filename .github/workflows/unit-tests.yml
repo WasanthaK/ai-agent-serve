@@ -108,3 +108,4 @@ jobs:
           PYTHONPATH=. python tests/integration_provider_response_reliability.py -q
           PYTHONPATH=. python tests/integration_provider_selection.py -q
           PYTHONPATH=. python tests/integration_rfq_handoff.py -q
+          PYTHONPATH=. python tests/integration_rfq_delivery.py -q
