@@ -263,19 +263,26 @@ Completed RFQ handoff foundation:
 - exact retries return the original RFQ and original handoff IDs
 - preparation creates no response-reliability opportunity
 
+Completed RFQ delivery / response-opportunity activation:
+
+- software-only delivery authorization and confirmation implemented and CI-verified in PR #40
+- both transitions require operator `decide`
+- current provider eligibility is re-checked before authorization and confirmation
+- authorization performs no provider contact
+- delivery confirmation requires an explicit timezone-aware response deadline
+- response-reliability opportunity creation is atomic with delivery confirmation
+- exact retries are idempotent and conflicting deadlines fail closed
+
 Current bounded work:
 
-- add software-only RFQ delivery authorization and confirmation state
-- require operator `decide` for both transitions
-- re-check current provider eligibility before authorization
-- move provider handoff from `prepared` to `authorized` without provider contact
-- require explicit timezone-aware response deadline for confirmation
-- re-check provider eligibility again at confirmation
-- move handoff from `authorized` to `delivered`
-- atomically create the response-reliability opportunity using handoff ID as opportunity ID
-- write `rfq_delivery_authorized` and `rfq_delivery_confirmed`
-- make exact retries idempotent and conflicting deadlines fail closed
-- do not perform live email/WhatsApp/SMS delivery, ingest provider responses, dispatch work, or activate ranking in this slice
+- ingest one structured provider response only for an already delivered RFQ handoff
+- accept only `quote` or `decline` response outcomes
+- require an explicit timezone-aware provider response timestamp
+- bind the response deterministically to the delivered handoff and its provider
+- require operator `decide` for this software-only ingestion path
+- write `rfq_provider_response_recorded` in the same transaction
+- make exact retries idempotent and conflicting response evidence fail closed
+- do not contact providers, parse quotation documents, evaluate or rank quotations, dispatch work, or activate provider ranking in this slice
 
 Routing roadmap:
 
@@ -285,8 +292,8 @@ Routing roadmap:
 - Historical response-reliability evidence foundation — complete
 - Human-approved provider selection — complete
 - RFQ handoff foundation — complete
-- RFQ delivery / response-opportunity activation — in progress
-- Provider-response ingestion
+- RFQ delivery / response-opportunity activation — complete
+- Provider-response ingestion — in progress
 - Deterministic ranking/reordering — only after real governed RFQ response history exists
 
 Target routing behavior:
