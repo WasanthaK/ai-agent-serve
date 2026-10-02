@@ -232,6 +232,48 @@ class RouteAuthorizationTests(unittest.TestCase):
             )
             self.assertEqual(readable.status_code, 200)
 
+    def test_rfq_handoff_preparation_requires_decide_permission(self):
+        prepared = {
+            "rfq_id": str(uuid4()),
+            "request_id": str(self.request_id),
+            "status": "prepared",
+            "provider_handoffs": [],
+            "delivery_started": False,
+        }
+
+        with patch.object(
+            api,
+            "prepare_rfq_handoff",
+            return_value=prepared,
+        ) as prepare:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/rfq-handoff",
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            prepare.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/rfq-handoff",
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                prepare.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
+        with patch.object(
+            api,
+            "get_rfq_for_request",
+            return_value=prepared,
+        ):
+            readable = self.client.get(
+                f"/requests/{self.request_id}/rfq-handoff",
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(readable.status_code, 200)
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)
@@ -247,6 +289,14 @@ class RouteAuthorizationTests(unittest.TestCase):
             ("POST", f"/requests/{self.request_id}/reply", {"message": "Test"}, OPERATOR_KEY, INBOUND_KEY),
             ("POST", f"/requests/{self.request_id}/approve", {}, OPERATOR_KEY, INBOUND_KEY),
             ("POST", f"/requests/{self.request_id}/reject", {}, OPERATOR_KEY, INBOUND_KEY),
+            ("GET", f"/requests/{self.request_id}/provider-selection", None, OPERATOR_KEY, INBOUND_KEY),
+            ("POST", f"/requests/{self.request_id}/provider-selection", {
+                "service_slug": "plumbing",
+                "area_key": "bn:brunei-muara",
+                "provider_ids": [str(uuid4())],
+            }, OPERATOR_KEY, INBOUND_KEY),
+            ("GET", f"/requests/{self.request_id}/rfq-handoff", None, OPERATOR_KEY, INBOUND_KEY),
+            ("POST", f"/requests/{self.request_id}/rfq-handoff", None, OPERATOR_KEY, INBOUND_KEY),
             ("POST", f"/requests/{self.request_id}/tools/prepare_customer_follow_up", None, OPERATOR_KEY, INBOUND_KEY),
         ]
         for method, path, body, correct, wrong in paths:
@@ -257,10 +307,60 @@ class RouteAuthorizationTests(unittest.TestCase):
                     self.assertEqual(response.status_code, 401)
                     self.assertEqual(response.json(), {"detail": "Invalid API credentials"})
 
-                if path.startswith("/requests/") or path.endswith("/reply"):
+                if "/provider-selection" in path:
+                    if method == "GET":
+                        context = patch.object(
+                            api,
+                            "get_provider_selection",
+                            return_value=None,
+                        )
+                    else:
+                        context = patch.object(
+                            api,
+                            "select_providers_for_request",
+                            side_effect=api.ProviderSelectionNotFoundError(
+                                "Request not found"
+                            ),
+                        )
+                    with context:
+                        response = self.client.request(
+                            method,
+                            path,
+                            json=body,
+                            headers={"X-API-Key": correct},
+                        )
+                    self.assertEqual(response.status_code, 404)
+                elif "/rfq-handoff" in path:
+                    if method == "GET":
+                        context = patch.object(
+                            api,
+                            "get_rfq_for_request",
+                            return_value=None,
+                        )
+                    else:
+                        context = patch.object(
+                            api,
+                            "prepare_rfq_handoff",
+                            side_effect=api.RFQHandoffNotFoundError(
+                                "Request not found"
+                            ),
+                        )
+                    with context:
+                        response = self.client.request(
+                            method,
+                            path,
+                            json=body,
+                            headers={"X-API-Key": correct},
+                        )
+                    self.assertEqual(response.status_code, 404)
+                elif path.startswith("/requests/") or path.endswith("/reply"):
                     with patch.object(api, "get_request", return_value=None):
-                        response = self.client.request(method, path, json=body,
-                            headers={"X-API-Key": correct})
+                        response = self.client.request(
+                            method,
+                            path,
+                            json=body,
+                            headers={"X-API-Key": correct},
+                        )
                     self.assertEqual(response.status_code, 404)
 
     def test_inbound_credential_can_create_request(self):
