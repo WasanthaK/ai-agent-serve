@@ -55,7 +55,8 @@ def _normalize_actor(actor: str) -> str:
 def _rfq_result(cursor, rfq):
     cursor.execute(
         """
-        SELECT id, provider_id, status, created_at
+        SELECT id, provider_id, status, authorized_at, authorized_by,
+               delivered_at, response_deadline_at, created_at
         FROM rfq_provider_handoffs
         WHERE rfq_id = %s
         ORDER BY provider_id ASC
@@ -67,6 +68,10 @@ def _rfq_result(cursor, rfq):
             "handoff_id": str(row["id"]),
             "provider_id": str(row["provider_id"]),
             "status": row["status"],
+            "authorized_at": row["authorized_at"],
+            "authorized_by": row["authorized_by"],
+            "delivered_at": row["delivered_at"],
+            "response_deadline_at": row["response_deadline_at"],
             "created_at": row["created_at"],
         }
         for row in cursor.fetchall()
@@ -86,7 +91,14 @@ def _rfq_result(cursor, rfq):
         "created_at": rfq["created_at"],
         "provider_handoffs": handoffs,
         "provider_count": len(handoffs),
-        "delivery_started": False,
+        "delivery_started": any(
+            item["status"] in {"authorized", "delivered"}
+            for item in handoffs
+        ),
+        "delivered_provider_count": sum(
+            item["status"] == "delivered"
+            for item in handoffs
+        ),
     }
 
 
