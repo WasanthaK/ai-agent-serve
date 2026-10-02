@@ -74,11 +74,52 @@ The skill must never invent, add, remove, rank, select, approve, suspend, or con
 
 This stage exposes no provider-routing HTTP endpoint and registers no write-capable routing tool.
 
+## Ranking-policy governance
+
+Provider ranking remains disabled by default.
+
+The current provider facts — approval, service capability, exact coverage area, availability and compliance — are eligibility gates. They must not be converted into ranking points because every candidate has already passed them.
+
+`provider_ranking_policy.py` defines the governance contract that must be satisfied before ranking can be enabled.
+
+Any future ranking factor must have all of the following before activation:
+
+- an explicit deterministic evidence source;
+- a fixed ranking direction;
+- a versioned normalization rule;
+- a defined missing-data rule;
+- a freshness rule; and
+- an integer weight.
+
+When ranking is enabled, active factor weights must total exactly 100.
+
+The policy catalogue currently permits only future operational factors for which deterministic evidence could be added later:
+
+- `confirmed_capacity`
+- `confirmed_start_time`
+- `distance_km`
+- `response_reliability`
+- `service_quality`
+
+No factor is active today because the required comparable evidence is not yet implemented.
+
+Explicitly prohibited ranking inputs include:
+
+- any eligibility gate;
+- provider ID or provider creation order;
+- model preference;
+- protected characteristics;
+- undisclosed commercial priority.
+
+Provider selection remains `human_only`. Ranking ties require `human_review`; the system must not silently break ties using IDs, creation order or model judgment.
+
+This slice defines no score calculation and performs no ranking.
+
 ## Current exclusions
 
 This routing stage does not yet include:
 
-- provider ranking or scoring
+- executable provider ranking or scoring
 - automatic provider selection
 - RFQ delivery
 - provider contact
@@ -100,3 +141,5 @@ Unit tests prove:
 - empty-result explanations do not invent failure reasons or broaden policy.
 
 The PostgreSQL integration proof creates two otherwise matching providers, verifies that a non-compliant provider is excluded, and verifies that the surviving provider receives only the five deterministic eligibility explanations.
+
+Ranking-policy unit tests additionally prove that ranking is disabled by default, eligibility gates cannot become score factors, automatic selection and arbitrary tie-breaking are rejected, active weights must total 100, and every enabled factor must carry complete governance metadata.
