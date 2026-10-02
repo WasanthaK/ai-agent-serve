@@ -17,6 +17,12 @@ from quote_recommendation import (
     get_quote_recommendation,
     recommend_quote_for_request,
 )
+from quote_award import (
+    QuoteAwardConflictError,
+    QuoteAwardEligibilityError,
+    award_recommended_quote,
+    get_quote_award,
+)
 from rfq_delivery import authorize_rfq_delivery, confirm_rfq_delivery
 from rfq_handoff import prepare_rfq_handoff
 from rfq_response import ingest_rfq_response
@@ -192,6 +198,58 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         self.assertFalse(
             recommendation_events[0]["details"]["provider_contacted"]
         )
+
+        award = award_recommended_quote(
+            request_id,
+            UUID(first_result["recommendation_id"]),
+            reason="Human confirmed award after reviewing comparison.",
+            actor="operator:ci",
+        )
+        award_retry = award_recommended_quote(
+            request_id,
+            UUID(first_result["recommendation_id"]),
+            reason="Human confirmed award after reviewing comparison.",
+            actor="operator:ci",
+        )
+
+        self.assertEqual(award_retry["award_id"], award["award_id"])
+        self.assertEqual(award["normalized_quote_id"], str(chosen))
+        self.assertEqual(award["award_authority"], "human")
+        self.assertFalse(award["provider_contacted"])
+        self.assertFalse(award["dispatch_created"])
+        self.assertFalse(award["request_status_changed"])
+
+        with self.assertRaises(QuoteAwardConflictError):
+            award_recommended_quote(
+                request_id,
+                UUID(first_result["recommendation_id"]),
+                reason="Different award reason",
+                actor="operator:ci",
+            )
+
+        persisted_award = get_quote_award(request_id)
+        self.assertEqual(persisted_award["award_id"], award["award_id"])
+
+        award_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"] == "quote_award_recorded"
+        ]
+        self.assertEqual(len(award_events), 1)
+        self.assertFalse(award_events[0]["details"]["provider_contacted"])
+        self.assertFalse(award_events[0]["details"]["dispatch_created"])
+        self.assertFalse(
+            award_events[0]["details"]["request_status_changed"]
+        )
+
+        set_provider_compliance(second, "non_compliant")
+        another_request_id = save_request(
+            "website",
+            "CI Customer 2",
+            "Need plumbing work",
+            ready_analysis(),
+        )
+        self.request_ids.append(another_request_id)
 
 
 if __name__ == "__main__":
