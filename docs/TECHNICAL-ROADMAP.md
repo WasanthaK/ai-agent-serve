@@ -218,21 +218,31 @@ Completed:
 - an empty candidate set returns `no_eligible_provider` and requires human review
 - PostgreSQL proof verifies persisted compliance is enforced before candidate construction
 
+Completed:
+
+- deterministic candidate construction implemented and CI-verified in PR #34
+- deterministic routing explanation implemented and CI-verified in PR #35
+- explanations reconstruct candidates internally from persisted eligibility
+- explanations are explicitly unranked and unselected
+- empty-result explanations do not invent provider-specific failure reasons
+
 Current bounded work:
 
-- explain routing candidates using only deterministic eligibility evidence already proven by candidate construction
-- construct the candidate set internally rather than accepting caller/model-supplied providers
-- explain only approval, exact service capability, exact coverage area, availability and compliance
-- explicitly mark explanation output as unranked with no selected provider
-- keep empty-result explanations generic rather than guessing why individual providers failed eligibility
-- prove explanations against real PostgreSQL provider state
-- do not rank, score, select, contact, dispatch, mutate providers, or hand off an RFQ in this slice
+- define a versioned ranking-policy contract without implementing scoring
+- keep approval, service capability, exact coverage area, availability and compliance as eligibility gates rather than ranking points
+- keep ranking disabled until deterministic comparable factor data exists
+- require every future factor to declare evidence source, direction, normalization, missing-data handling, freshness and weight
+- require enabled weights to total exactly 100
+- prohibit provider ID/creation order, model preference, protected characteristics and undisclosed commercial priority as ranking inputs
+- keep provider selection human-only and route ties to human review
+- do not calculate scores, reorder candidates, select providers, contact providers, dispatch work or hand off an RFQ in this slice
 
 Routing roadmap:
 
 - Deterministic candidate construction — complete
-- Routing explanation from deterministic evidence — in progress
-- Policy-aware ranking/scoring, only after explicit policy design
+- Routing explanation from deterministic evidence — complete
+- Ranking policy design — in progress
+- Deterministic ranking/scoring implementation — only after policy factors have real governed data
 - Human-approved provider selection
 - RFQ handoff
 
