@@ -201,21 +201,7 @@ def select_providers_for_request(
                 )
                 existing = cur.fetchone()
 
-                eligible = list_eligible_providers_for_service_and_area_with_cursor(
-                    cur,
-                    service_slug,
-                    area_key,
-                    lock_rows=True,
-                )
-                eligible_ids = {provider["id"] for provider in eligible}
                 selected_set = set(selected_ids)
-
-                if not selected_set.issubset(eligible_ids):
-                    raise ProviderSelectionEligibilityError(
-                        "Selected providers must all be currently eligible"
-                    )
-
-                eligible_snapshot = sorted(str(provider_id) for provider_id in eligible_ids)
                 selected_snapshot = sorted(str(provider_id) for provider_id in selected_set)
 
                 if existing is not None:
@@ -224,7 +210,6 @@ def select_providers_for_request(
                         existing["service_slug"] == service_slug
                         and existing["area_key"] == area_key
                         and result["selected_provider_ids"] == selected_snapshot
-                        and result["eligible_provider_ids"] == eligible_snapshot
                         and existing["selected_by"] == actor
                         and existing["reason"] == reason
                     )
@@ -233,6 +218,21 @@ def select_providers_for_request(
                     raise ProviderSelectionConflictError(
                         "A different provider selection already exists for this request"
                     )
+
+                eligible = list_eligible_providers_for_service_and_area_with_cursor(
+                    cur,
+                    service_slug,
+                    area_key,
+                    lock_rows=True,
+                )
+                eligible_ids = {provider["id"] for provider in eligible}
+
+                if not selected_set.issubset(eligible_ids):
+                    raise ProviderSelectionEligibilityError(
+                        "Selected providers must all be currently eligible"
+                    )
+
+                eligible_snapshot = sorted(str(provider_id) for provider_id in eligible_ids)
 
                 selection_id = uuid.uuid4()
                 cur.execute(
