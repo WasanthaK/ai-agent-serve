@@ -10,6 +10,7 @@ from provider_directory import (
     set_provider_availability,
     set_provider_compliance,
 )
+from provider_ranking import rank_providers_by_response_reliability
 from provider_ranking_readiness import (
     assess_response_reliability_ranking_readiness,
 )
@@ -112,6 +113,15 @@ class ProviderRankingReadinessIntegrationTests(unittest.TestCase):
             item["history_status"] == "sufficient_history"
             for item in ready["evidence"]
         ))
+
+        ranked = rank_providers_by_response_reliability(
+            "plumbing",
+            "bn:brunei-muara",
+            as_of=as_of,
+        )
+        self.assertTrue(ranked["ranked"])
+        self.assertIsNone(ranked["selected_provider_id"])
+        self.assertEqual(ranked["selection_mode"], "human_only")
 
 
 if __name__ == "__main__":
