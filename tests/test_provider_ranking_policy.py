@@ -23,15 +23,18 @@ def factor(name="confirmed_capacity", weight=100):
 
 
 class ProviderRankingPolicyTests(unittest.TestCase):
-    def test_current_policy_is_disabled_and_human_only(self):
+    def test_current_policy_enables_only_response_reliability_and_is_human_only(self):
         validated = validate_provider_ranking_policy(CURRENT_PROVIDER_RANKING_POLICY)
 
-        self.assertFalse(validated.enabled)
-        self.assertEqual(validated.factors, ())
+        self.assertTrue(validated.enabled)
+        self.assertEqual(
+            validated.factors,
+            (RESPONSE_RELIABILITY_FACTOR_POLICY,),
+        )
         self.assertEqual(validated.selection_mode, "human_only")
         self.assertEqual(validated.tie_policy, "human_review")
 
-    def test_response_reliability_factor_is_governed_but_not_active(self):
+    def test_response_reliability_factor_is_governed_and_active(self):
         factor_policy = RESPONSE_RELIABILITY_FACTOR_POLICY
 
         self.assertEqual(factor_policy.name, "response_reliability")
@@ -44,8 +47,11 @@ class ProviderRankingPolicyTests(unittest.TestCase):
         self.assertIn("10000", factor_policy.normalization_rule)
         self.assertIn("5", factor_policy.missing_data_rule)
         self.assertIn("90", factor_policy.freshness_rule)
-        self.assertEqual(CURRENT_PROVIDER_RANKING_POLICY.factors, ())
-        self.assertFalse(CURRENT_PROVIDER_RANKING_POLICY.enabled)
+        self.assertEqual(
+            CURRENT_PROVIDER_RANKING_POLICY.factors,
+            (factor_policy,),
+        )
+        self.assertTrue(CURRENT_PROVIDER_RANKING_POLICY.enabled)
 
         proposed = ProviderRankingPolicy(
             version="1.0.0",

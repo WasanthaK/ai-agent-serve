@@ -285,15 +285,23 @@ Completed provider-response ingestion:
 - exact retries are idempotent and conflicting evidence fails closed
 - PostgreSQL response-ingestion integration proof is explicitly included in CI
 
+Completed ranking-readiness guard:
+
+- ranking-readiness assessment implemented and CI-verified in PR #43
+- at least two current eligible providers are required
+- every current candidate must have sufficient 90-day response history
+- one insufficient-history provider blocks ranking for the whole set
+- readiness itself never sorts or selects providers
+
 Current bounded work:
 
-- assess whether the current eligible-provider set has enough governed response history for future reliability-based ranking
-- require at least two currently eligible providers before ranking is meaningful
-- require every current eligible provider to have sufficient 90-day response history
-- if any provider has insufficient history, keep the whole candidate set unranked
-- expose evidence sufficiency without sorting or selecting providers
-- keep `ranking_policy_enabled = false`, `ranked = false`, and `selected_provider_id = null`
-- do not activate ranking, reorder candidates, contact providers, evaluate quotations, or dispatch work in this slice
+- enable only governed `response_reliability` ranking at 100% weight
+- execute ranking only when readiness succeeds
+- order candidates by deterministic reliability basis points, highest first
+- give equal scores the same rank position
+- require human review when ties exist
+- keep provider selection human-only and `selected_provider_id = null`
+- do not contact providers, evaluate quote content, dispatch work, or alter eligibility
 
 Routing roadmap:
 
@@ -305,8 +313,8 @@ Routing roadmap:
 - RFQ handoff foundation — complete
 - RFQ delivery / response-opportunity activation — complete
 - Provider-response ingestion — complete
-- Ranking-readiness guard — in progress
-- Deterministic ranking/reordering — only when governed readiness is satisfied
+- Ranking-readiness guard — complete
+- Deterministic response-reliability ranking — in progress
 
 Target routing behavior:
 
