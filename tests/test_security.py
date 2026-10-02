@@ -307,10 +307,60 @@ class RouteAuthorizationTests(unittest.TestCase):
                     self.assertEqual(response.status_code, 401)
                     self.assertEqual(response.json(), {"detail": "Invalid API credentials"})
 
-                if path.startswith("/requests/") or path.endswith("/reply"):
+                if "/provider-selection" in path:
+                    if method == "GET":
+                        context = patch.object(
+                            api,
+                            "get_provider_selection",
+                            return_value=None,
+                        )
+                    else:
+                        context = patch.object(
+                            api,
+                            "select_providers_for_request",
+                            side_effect=api.ProviderSelectionNotFoundError(
+                                "Request not found"
+                            ),
+                        )
+                    with context:
+                        response = self.client.request(
+                            method,
+                            path,
+                            json=body,
+                            headers={"X-API-Key": correct},
+                        )
+                    self.assertEqual(response.status_code, 404)
+                elif "/rfq-handoff" in path:
+                    if method == "GET":
+                        context = patch.object(
+                            api,
+                            "get_rfq_for_request",
+                            return_value=None,
+                        )
+                    else:
+                        context = patch.object(
+                            api,
+                            "prepare_rfq_handoff",
+                            side_effect=api.RFQHandoffNotFoundError(
+                                "Request not found"
+                            ),
+                        )
+                    with context:
+                        response = self.client.request(
+                            method,
+                            path,
+                            json=body,
+                            headers={"X-API-Key": correct},
+                        )
+                    self.assertEqual(response.status_code, 404)
+                elif path.startswith("/requests/") or path.endswith("/reply"):
                     with patch.object(api, "get_request", return_value=None):
-                        response = self.client.request(method, path, json=body,
-                            headers={"X-API-Key": correct})
+                        response = self.client.request(
+                            method,
+                            path,
+                            json=body,
+                            headers={"X-API-Key": correct},
+                        )
                     self.assertEqual(response.status_code, 404)
 
     def test_inbound_credential_can_create_request(self):
