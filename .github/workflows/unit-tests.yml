@@ -114,3 +114,4 @@ jobs:
           PYTHONPATH=. python tests/integration_quote_normalization.py -q
           PYTHONPATH=. python tests/integration_quote_completeness.py -q
           PYTHONPATH=. python tests/integration_quote_comparison.py -q
+          PYTHONPATH=. python tests/integration_quote_recommendation.py -q
