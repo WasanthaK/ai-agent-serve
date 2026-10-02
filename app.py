@@ -50,6 +50,14 @@ from provider_selection import (
     get_provider_selection,
     select_providers_for_request,
 )
+from rfq_handoff import (
+    RFQHandoffConflictError,
+    RFQHandoffNotFoundError,
+    RFQHandoffStateError,
+    RFQHandoffValidationError,
+    get_rfq_for_request,
+    prepare_rfq_handoff,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -579,6 +587,43 @@ def select_request_providers(
         ProviderSelectionStateError,
         ProviderSelectionEligibilityError,
         ProviderSelectionConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/rfq-handoff",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_rfq_handoff(request_id: UUID):
+    try:
+        rfq = get_rfq_for_request(request_id)
+    except RFQHandoffValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if rfq is None:
+        raise HTTPException(status_code=404, detail="RFQ handoff not found")
+
+    return rfq
+
+
+@app.post("/requests/{request_id}/rfq-handoff")
+def prepare_request_rfq_handoff(
+    request_id: UUID,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return prepare_rfq_handoff(
+            request_id,
+            actor=operator.actor,
+        )
+    except RFQHandoffNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RFQHandoffValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        RFQHandoffStateError,
+        RFQHandoffConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
