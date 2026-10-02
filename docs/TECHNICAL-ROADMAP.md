@@ -328,16 +328,25 @@ Completed deterministic quote comparison:
 - scope, exclusions and terms remain side-by-side evidence without scoring
 - no overall winner, recommendation, selection or award is produced automatically
 
+Completed human quote recommendation:
+
+- immutable human-authored quote recommendation implemented and CI-verified in PR #48
+- recommended quote must belong to the current comparison-ready set
+- explicit human rationale is required
+- deterministic comparison facts are snapshotted at recommendation time
+- writes require operator `decide`; reads require `read`
+- recommendation creates no award, provider contact, request-state change or dispatch
+
 Current bounded work:
 
-- let a human operator record one immutable quote recommendation for a request
-- require the recommended quote to belong to the current comparison-ready set
-- require explicit human rationale
-- snapshot the deterministic comparison facts used at decision time
+- let a human operator record one immutable quote award tied to the existing recommendation
+- require the awarded quote to remain comparison-ready at award time
+- re-check current provider eligibility for the RFQ's exact service and area inside the award transaction
+- require explicit human award reason
 - require operator `decide` to record and `read` to retrieve
-- make exact retries idempotent and conflicting recommendations fail closed
-- write `quote_recommendation_recorded` transactionally
-- do not create an award, contact a provider, change request status, or dispatch work in this slice
+- make exact retries idempotent and conflicting awards fail closed
+- write `quote_award_recorded` transactionally
+- do not contact the provider, create dispatch, or change request status in this slice
 
 Routing roadmap:
 
@@ -366,7 +375,7 @@ Target routing behavior:
 - Normalize different quotation formats — foundation complete
 - Detect missing scope, exclusions and terms — complete
 - Compare price, availability, scope and risk — deterministic comparison complete
-- Present recommendations for human approval — in progress
+- Present recommendations for human approval — recommendation complete; human award in progress
 
 Purchase-order creation remains outside the initial scope.
 
