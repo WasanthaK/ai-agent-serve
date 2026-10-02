@@ -91,6 +91,14 @@ from quote_comparison import (
     QuoteComparisonNotReadyError,
     compare_request_quotes,
 )
+from quote_recommendation import (
+    QuoteRecommendationConflictError,
+    QuoteRecommendationEligibilityError,
+    QuoteRecommendationNotFoundError,
+    QuoteRecommendationValidationError,
+    get_quote_recommendation,
+    recommend_quote_for_request,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -161,6 +169,11 @@ class NormalizedQuoteInput(BaseModel):
     available_from: Optional[date] = None
     estimated_duration_days: Optional[int] = Field(default=None, gt=0)
     validity_expires_at: Optional[datetime] = None
+
+
+class QuoteRecommendationInput(BaseModel):
+    normalized_quote_id: UUID
+    rationale: str = Field(min_length=1, max_length=2000)
 
 
 class CustomerReply(BaseModel):
@@ -843,6 +856,49 @@ def retrieve_quote_comparison(request_id: UUID):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/quote-recommendation",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_quote_recommendation(request_id: UUID):
+    try:
+        recommendation = get_quote_recommendation(request_id)
+    except QuoteRecommendationValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if recommendation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Quote recommendation not found",
+        )
+    return recommendation
+
+
+@app.post("/requests/{request_id}/quote-recommendation")
+def record_quote_recommendation(
+    request_id: UUID,
+    recommendation: QuoteRecommendationInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return recommend_quote_for_request(
+            request_id,
+            recommendation.normalized_quote_id,
+            rationale=recommendation.rationale,
+            actor=operator.actor,
+        )
+    except QuoteRecommendationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except QuoteRecommendationValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        QuoteRecommendationEligibilityError,
+        QuoteRecommendationConflictError,
+        QuoteComparisonNotReadyError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.post("/requests/{request_id}/approve")
