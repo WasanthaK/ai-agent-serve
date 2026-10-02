@@ -317,6 +317,48 @@ class RouteAuthorizationTests(unittest.TestCase):
             )
             self.assertEqual(allowed.status_code, 200)
 
+    def test_normalized_quote_write_requires_decide_permission(self):
+        handoff_id = uuid4()
+        payload = {
+            "amount_minor": 125000,
+            "currency": "AUD",
+            "scope_summary": "Replace leaking kitchen tap",
+            "exclusions": [],
+            "terms": [],
+        }
+        result = {
+            "normalized_quote_id": str(uuid4()),
+            "handoff_id": str(handoff_id),
+            "amount_minor": 125000,
+            "currency": "AUD",
+            "evaluated": False,
+            "selected": False,
+        }
+
+        with patch.object(
+            api,
+            "normalize_structured_quote",
+            return_value=result,
+        ) as normalize:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/rfq-handoffs/{handoff_id}/normalized-quote",
+                json=payload,
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            normalize.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/rfq-handoffs/{handoff_id}/normalized-quote",
+                json=payload,
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                normalize.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)
