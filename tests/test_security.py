@@ -359,6 +359,32 @@ class RouteAuthorizationTests(unittest.TestCase):
                 "operator:wasantha",
             )
 
+    def test_quote_completeness_requires_read_permission(self):
+        handoff_id = uuid4()
+        result = {
+            "normalized_quote_id": str(uuid4()),
+            "status": "complete",
+            "comparison_ready": True,
+            "requires_human_review": False,
+        }
+
+        with patch.object(
+            api,
+            "assess_quote_completeness",
+            return_value=result,
+        ) as assess:
+            missing = self.client.get(
+                f"/requests/{self.request_id}/rfq-handoffs/{handoff_id}/quote-completeness"
+            )
+            self.assertIn(missing.status_code, (401, 403))
+            assess.assert_not_called()
+
+            readable = self.client.get(
+                f"/requests/{self.request_id}/rfq-handoffs/{handoff_id}/quote-completeness",
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(readable.status_code, 200)
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)
