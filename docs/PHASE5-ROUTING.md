@@ -232,6 +232,42 @@ Exact retries are idempotent. A retry with a different response deadline fails c
 
 The service still performs no external email, WhatsApp, SMS or other provider send in this slice. A future authenticated delivery adapter must invoke the authorization gate before contact and confirm delivery immediately after successful send.
 
+## Governed provider-response ingestion
+
+Provider-response ingestion is software-only and applies only to an already delivered RFQ handoff.
+
+The ingestion path:
+
+- requires operator `decide`;
+- accepts only structured `quote` or `decline` outcomes;
+- requires an explicit timezone-aware provider response timestamp;
+- binds the response to the delivered handoff and provider identity;
+- writes immutable response evidence;
+- writes `rfq_provider_response_recorded` in the same transaction;
+- treats exact retries as idempotent; and
+- fails closed when retry evidence conflicts.
+
+It does not parse quotation documents, evaluate quote content, rank providers, contact providers, or dispatch work.
+
+## Ranking readiness
+
+`provider_ranking_readiness.assess_response_reliability_ranking_readiness(service_slug, area_key)` determines only whether a future response-reliability ranking implementation would have enough governed evidence.
+
+Readiness requires:
+
+- at least two currently eligible providers; and
+- every currently eligible provider to have `sufficient_history` under the governed 90-day / minimum-5-completed-opportunities reliability metric.
+
+If any current candidate has insufficient history, the entire candidate set remains unranked. The system does not silently rank only the providers with more data.
+
+A ready result still states:
+
+- `ranking_policy_enabled = false`;
+- `ranked = false`; and
+- `selected_provider_id = null`.
+
+This is evidence sufficiency only. It does not activate the ranking policy or reorder providers.
+
 ## Current exclusions
 
 This routing stage does not yet include:
@@ -240,7 +276,6 @@ This routing stage does not yet include:
 - automatic provider selection
 - live RFQ delivery transport
 - provider contact by this service
-- provider-response ingestion
 - fuzzy or proximity geography matching
 - availability windows or capacity scoring
 - model-controlled provider eligibility
@@ -269,3 +304,7 @@ The provider-selection PostgreSQL proof verifies current eligibility enforcement
 The RFQ-handoff PostgreSQL proof verifies deterministic preparation from the immutable human selection, stable provider-specific handoff identities, privacy-minimized RFQ snapshots, one preparation audit event, idempotent retries after later request-state changes, required selection/state gates, and the critical negative guarantee that preparation creates no response-reliability opportunities. Authorization tests prove that preparation requires `decide` while retrieval requires only `read`.
 
 The RFQ-delivery PostgreSQL proof verifies eligibility revalidation before authorization and again before confirmation, required transition order, one delivery audit event per transition, deterministic handoff-backed response-opportunity creation, idempotent confirmation, and fail-closed conflicting deadlines. Authorization tests prove both activation routes require `decide`.
+
+The provider-response ingestion PostgreSQL proof verifies that only delivered handoffs accept quote/decline evidence, response timestamps cannot predate delivery, exact retries are idempotent, conflicting evidence fails closed, and the audit event is transactional.
+
+The ranking-readiness PostgreSQL proof verifies that readiness is derived from the current deterministic eligible-provider set plus persisted response history, that one insufficient-history provider blocks the whole set, and that sufficient history only marks readiness while ranking remains disabled and unperformed.
