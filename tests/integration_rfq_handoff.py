@@ -1,5 +1,5 @@
 import unittest
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from db import (
     get_connection,
@@ -148,7 +148,7 @@ class RFQHandoffIntegrationTests(unittest.TestCase):
                     FROM provider_response_opportunities
                     WHERE opportunity_id = ANY(%s)
                     """,
-                    ([item["handoff_id"] for item in rfq["provider_handoffs"]],),
+                    ([UUID(item["handoff_id"]) for item in rfq["provider_handoffs"]],),
                 )
                 self.assertEqual(cur.fetchone()[0], 0)
 
