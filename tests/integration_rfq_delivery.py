@@ -20,6 +20,11 @@ from rfq_delivery import (
 )
 from rfq_handoff import prepare_rfq_handoff
 from rfq_response import RFQResponseConflictError, ingest_rfq_response
+from structured_quotation import (
+    StructuredQuotationConflictError,
+    StructuredQuotationStateError,
+    record_structured_quotation,
+)
 
 
 def ready_analysis():
@@ -262,6 +267,80 @@ class RFQDeliveryIntegrationTests(unittest.TestCase):
             ]),
             1,
         )
+
+
+    def test_quote_response_can_create_one_structured_quotation(self):
+        request_id, provider_id, handoff_id = self.create_request_and_handoff()
+        authorize_rfq_delivery(request_id, handoff_id, actor="operator:ci")
+        confirm_rfq_delivery(
+            request_id,
+            handoff_id,
+            datetime.now(timezone.utc) + timedelta(hours=24),
+            actor="operator:ci",
+        )
+        submitted_at = datetime.now(timezone.utc)
+        ingest_rfq_response(
+            request_id, handoff_id, "quote", submitted_at, actor="operator:ci"
+        )
+
+        first = record_structured_quotation(
+            request_id,
+            handoff_id,
+            currency="USD",
+            total_amount_minor=12500,
+            scope_text="Replace kitchen tap",
+            submitted_at=submitted_at,
+            exclusions_text="Wall repairs excluded",
+            actor="operator:ci",
+        )
+        retry = record_structured_quotation(
+            request_id,
+            handoff_id,
+            currency="USD",
+            total_amount_minor=12500,
+            scope_text="Replace kitchen tap",
+            submitted_at=submitted_at,
+            exclusions_text="Wall repairs excluded",
+            actor="operator:ci",
+        )
+        self.assertEqual(first["quotation_id"], retry["quotation_id"])
+        self.assertEqual(first["provider_id"], str(provider_id))
+
+        with self.assertRaises(StructuredQuotationConflictError):
+            record_structured_quotation(
+                request_id,
+                handoff_id,
+                currency="USD",
+                total_amount_minor=13000,
+                scope_text="Replace kitchen tap",
+                submitted_at=submitted_at,
+                exclusions_text="Wall repairs excluded",
+                actor="operator:ci",
+            )
+
+    def test_decline_response_cannot_create_quotation(self):
+        request_id, _provider_id, handoff_id = self.create_request_and_handoff()
+        authorize_rfq_delivery(request_id, handoff_id, actor="operator:ci")
+        confirm_rfq_delivery(
+            request_id,
+            handoff_id,
+            datetime.now(timezone.utc) + timedelta(hours=24),
+            actor="operator:ci",
+        )
+        submitted_at = datetime.now(timezone.utc)
+        ingest_rfq_response(
+            request_id, handoff_id, "decline", submitted_at, actor="operator:ci"
+        )
+        with self.assertRaises(StructuredQuotationStateError):
+            record_structured_quotation(
+                request_id,
+                handoff_id,
+                currency="USD",
+                total_amount_minor=10000,
+                scope_text="Should not persist",
+                submitted_at=submitted_at,
+                actor="operator:ci",
+            )
 
 
 if __name__ == "__main__":

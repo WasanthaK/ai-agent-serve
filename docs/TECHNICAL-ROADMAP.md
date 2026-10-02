@@ -273,16 +273,25 @@ Completed RFQ delivery / response-opportunity activation:
 - response-reliability opportunity creation is atomic with delivery confirmation
 - exact retries are idempotent and conflicting deadlines fail closed
 
+Completed provider-response ingestion:
+
+- governed structured quote/decline ingestion implemented and CI-verified in PR #41
+- responses require an already delivered RFQ handoff and operator `decide`
+- response evidence is bound to the durable handoff/provider identity
+- exact retries are idempotent and conflicting evidence fails closed
+- `rfq_provider_response_recorded` is written transactionally
+- no provider contact, quotation evaluation, ranking or dispatch occurs
+
 Current bounded work:
 
-- ingest one structured provider response only for an already delivered RFQ handoff
-- accept only `quote` or `decline` response outcomes
-- require an explicit timezone-aware provider response timestamp
-- bind the response deterministically to the delivered handoff and its provider
-- require operator `decide` for this software-only ingestion path
-- write `rfq_provider_response_recorded` in the same transaction
-- make exact retries idempotent and conflicting response evidence fail closed
-- do not contact providers, parse quotation documents, evaluate or rank quotations, dispatch work, or activate provider ranking in this slice
+- add deterministic structured quotation persistence only after a governed `quote` response
+- store currency and non-negative integer minor-unit total without floating-point money
+- store provider-supplied scope, availability, exclusions and terms as factual text only
+- require timezone-aware submission time and operator `decide`
+- keep one immutable structured quotation per provider handoff
+- write `structured_quotation_recorded` transactionally
+- make exact retries idempotent and conflicting quotation evidence fail closed
+- do not parse documents, score/evaluate quotations, rank providers, select a winner, dispatch work, or contact external systems
 
 Routing roadmap:
 
@@ -293,7 +302,8 @@ Routing roadmap:
 - Human-approved provider selection — complete
 - RFQ handoff foundation — complete
 - RFQ delivery / response-opportunity activation — complete
-- Provider-response ingestion — in progress
+- Provider-response ingestion — complete
+- Structured quotation foundation — in progress
 - Deterministic ranking/reordering — only after real governed RFQ response history exists
 
 Target routing behavior:
@@ -305,8 +315,9 @@ Target routing behavior:
 
 ### Quotation workflow
 
-- Create structured requests for quotation — foundation in progress
-- Collect provider responses
+- Create structured requests for quotation — foundation complete
+- Collect provider responses — structured ingestion complete
+- Normalize different quotation formats — structured persistence foundation in progress
 - Normalize different quotation formats
 - Detect missing scope, exclusions and terms
 - Compare price, availability, scope and risk
