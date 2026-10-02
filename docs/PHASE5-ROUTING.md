@@ -163,7 +163,44 @@ The same transaction:
 
 An exact retry returns the original immutable decision even if provider eligibility changes later. A different retry fails closed rather than silently replacing the human decision.
 
-The selection endpoint does not change request status, contact providers, create RFQs, dispatch work, or activate ranking.
+The selection endpoint does not change request status, contact providers, dispatch work, or activate ranking.
+
+## RFQ handoff foundation
+
+RFQ preparation starts only after an immutable human provider selection exists.
+
+`POST /requests/{request_id}/rfq-handoff` requires the existing operator `decide` permission. `GET /requests/{request_id}/rfq-handoff` requires `read`.
+
+Preparation creates exactly one durable RFQ snapshot per request and exactly one provider-specific handoff identity per selected provider.
+
+The RFQ snapshot deliberately contains only:
+
+- request ID;
+- provider-selection ID;
+- exact service slug;
+- exact area key;
+- request scope summary;
+- urgency;
+- preparing operator; and
+- creation timestamp.
+
+It deliberately does not copy the customer name or raw customer message into the RFQ foundation record.
+
+Every provider handoff is created with `status = prepared`. The database currently permits no other handoff state.
+
+The provider-specific handoff ID is the intended future response-opportunity identity. However, RFQ preparation does not yet:
+
+- contact a provider;
+- mark a handoff delivered;
+- assign a response deadline;
+- create a `provider_response_opportunities` row; or
+- start response-reliability timing.
+
+Those actions belong to a separately authorized delivery slice.
+
+RFQ preparation writes `rfq_handoff_prepared` in the same transaction. Exact retries return the original RFQ and the original provider handoff IDs; they do not create duplicate handoffs or duplicate audit events.
+
+An RFQ may be prepared only while the request is `ready` or `approved`. Once already prepared, an exact retry returns the immutable RFQ even if the request later moves to another status.
 
 ## Current exclusions
 
@@ -173,6 +210,8 @@ This routing stage does not yet include:
 - automatic provider selection
 - RFQ delivery
 - provider contact
+- RFQ response deadline activation
+- provider-response ingestion
 - fuzzy or proximity geography matching
 - availability windows or capacity scoring
 - model-controlled provider eligibility
@@ -197,3 +236,5 @@ Ranking-policy unit tests additionally prove that ranking is disabled by default
 The response-reliability PostgreSQL proof verifies a 90-day history window, exclusion of open opportunities, exclusion of stale history, on-time quote and decline handling, late/no-response handling, deterministic basis-point calculation, idempotent response recording, and fail-closed `insufficient_history` behavior below five completed opportunities.
 
 The provider-selection PostgreSQL proof verifies current eligibility enforcement, immutable/idempotent human decisions, audit-event persistence, rejection of ineligible providers, request-state gating, and preservation of the original decision after later eligibility changes. Authorization tests prove that selection requires `decide` while retrieval requires only `read`.
+
+The RFQ-handoff PostgreSQL proof verifies deterministic preparation from the immutable human selection, stable provider-specific handoff identities, privacy-minimized RFQ snapshots, one preparation audit event, idempotent retries after later request-state changes, required selection/state gates, and the critical negative guarantee that preparation creates no response-reliability opportunities. Authorization tests prove that preparation requires `decide` while retrieval requires only `read`.
