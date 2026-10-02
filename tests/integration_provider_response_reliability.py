@@ -30,8 +30,11 @@ class ProviderResponseReliabilityIntegrationTests(unittest.TestCase):
                 ("decline", -14, 6),
                 ("quote", -12, 30),
             )
+            first_response = None
 
-            for response_kind, offered_days, response_hours in completed_specs:
+            for index, (response_kind, offered_days, response_hours) in enumerate(
+                completed_specs
+            ):
                 opportunity_id = uuid4()
                 offered_at = as_of + timedelta(days=offered_days)
                 deadline_at = offered_at + timedelta(hours=24)
@@ -42,12 +45,19 @@ class ProviderResponseReliabilityIntegrationTests(unittest.TestCase):
                     offered_at,
                     deadline_at,
                 )
-                record_provider_response(
+                response = record_provider_response(
                     provider_id,
                     opportunity_id,
                     response_kind,
                     offered_at + timedelta(hours=response_hours),
                 )
+                if index == 0:
+                    first_response = (
+                        opportunity_id,
+                        response_kind,
+                        offered_at + timedelta(hours=response_hours),
+                        response["id"],
+                    )
 
             no_response_id = uuid4()
             no_response_offer = as_of - timedelta(days=10)
@@ -95,11 +105,11 @@ class ProviderResponseReliabilityIntegrationTests(unittest.TestCase):
 
             duplicate = record_provider_response(
                 provider_id,
-                completed_opportunity := uuid4(),
-                "quote",
-                as_of,
-            ) if False else None
-            self.assertIsNone(duplicate)
+                first_response[0],
+                first_response[1],
+                first_response[2],
+            )
+            self.assertEqual(duplicate["id"], first_response[3])
         finally:
             with get_connection() as conn:
                 with conn.cursor() as cur:
