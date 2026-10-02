@@ -68,6 +68,13 @@ from rfq_delivery import (
     authorize_rfq_delivery,
     confirm_rfq_delivery,
 )
+from rfq_response import (
+    RFQResponseConflictError,
+    RFQResponseNotFoundError,
+    RFQResponseStateError,
+    RFQResponseValidationError,
+    ingest_rfq_response,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -122,6 +129,11 @@ class ProviderSelectionDecision(BaseModel):
 
 class RFQDeliveryConfirmation(BaseModel):
     response_deadline_at: datetime
+
+
+class RFQProviderResponse(BaseModel):
+    response_kind: str = Field(min_length=1, max_length=20)
+    responded_at: datetime
 
 
 class CustomerReply(BaseModel):
@@ -692,6 +704,34 @@ def confirm_request_rfq_delivery(
         RFQDeliveryStateError,
         RFQDeliveryEligibilityError,
         RFQDeliveryConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post(
+    "/requests/{request_id}/rfq-handoffs/{handoff_id}/provider-response"
+)
+def record_request_rfq_provider_response(
+    request_id: UUID,
+    handoff_id: UUID,
+    response: RFQProviderResponse,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return ingest_rfq_response(
+            request_id,
+            handoff_id,
+            response.response_kind,
+            response.responded_at,
+            actor=operator.actor,
+        )
+    except RFQResponseNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RFQResponseValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        RFQResponseStateError,
+        RFQResponseConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
