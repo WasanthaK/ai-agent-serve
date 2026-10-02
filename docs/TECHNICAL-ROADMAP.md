@@ -227,29 +227,40 @@ Completed:
 - future ranking factors require deterministic evidence, normalization, missing-data, freshness and weight rules
 - provider selection remains human-only and ties require human review
 
+Completed response-reliability foundation:
+
+- historical response-reliability evidence implemented and CI-verified in PR #37
+- response opportunities and quote/decline responses are persisted separately
+- on-time quotes and on-time declines both count as reliable responses
+- late responses and expired no-response opportunities count as completed but not on time
+- still-open opportunities are excluded
+- the metric uses a rolling 90-day window and requires 5 completed opportunities
+- reliability is deterministic integer basis points from 0 to 10,000
+- insufficient history remains unscored
+- the factor remains inactive until real RFQ handoff generates governed production history
+
 Current bounded work:
 
-- add governed historical response-reliability evidence as the first selected ranking factor
-- persist response opportunities separately from provider quote/decline responses
-- count an on-time quote or on-time decline as a reliable response
-- count late responses and expired no-response opportunities as completed but not on time
-- exclude still-open opportunities from the metric
-- use a rolling 90-day history window
-- require at least 5 completed opportunities before producing a reliability score
-- expose reliability as deterministic basis points from 0 to 10,000
-- keep providers with insufficient history unscored rather than assigning a low score
-- keep the factor defined but inactive until real RFQ handoff generates governed production history
-- do not reorder candidates, select providers, contact providers, dispatch work or hand off an RFQ in this slice
+- add immutable human-approved provider selection
+- allow selection only from actionable request states: `ready` or `approved`
+- require the existing operator `decide` permission
+- rebuild and lock the deterministic eligible set inside the selection transaction
+- require every selected provider to belong to that current eligible set
+- persist the full eligible-provider snapshot and the selected provider set
+- treat provider selection as a set, never an ordering or ranking
+- write `provider_selection_recorded` in the same transaction
+- make exact retries idempotent and conflicting retries fail closed
+- do not change request status, contact providers, dispatch work, create an RFQ, or activate ranking in this slice
 
 Routing roadmap:
 
 - Deterministic candidate construction — complete
 - Routing explanation from deterministic evidence — complete
 - Ranking policy design — complete
-- Historical response-reliability evidence foundation — in progress
-- Deterministic ranking/reordering — only after real governed response history exists
-- Human-approved provider selection
+- Historical response-reliability evidence foundation — complete
+- Human-approved provider selection — in progress
 - RFQ handoff
+- Deterministic ranking/reordering — only after real governed RFQ response history exists
 
 Target routing behavior:
 
