@@ -41,6 +41,15 @@ from observability import (
     correlation_exception_handler,
 )
 from operational_metrics import operational_metrics
+from provider_selection import (
+    ProviderSelectionConflictError,
+    ProviderSelectionEligibilityError,
+    ProviderSelectionNotFoundError,
+    ProviderSelectionStateError,
+    ProviderSelectionValidationError,
+    get_provider_selection,
+    select_providers_for_request,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -71,6 +80,22 @@ class QuoteWebhookRequest(BaseModel):
 
 
 class WorkflowDecision(BaseModel):
+    reason: Optional[str] = Field(
+        default=None,
+        max_length=1000,
+    )
+
+
+class ProviderSelectionDecision(BaseModel):
+    service_slug: str = Field(
+        min_length=1,
+        max_length=120,
+    )
+    area_key: str = Field(
+        min_length=1,
+        max_length=120,
+    )
+    provider_ids: list[UUID]
     reason: Optional[str] = Field(
         default=None,
         max_length=1000,
@@ -510,6 +535,52 @@ def _process_customer_reply(request_id, reply, request, channel, actor):
         "workflow_status": updated_request["status"],
         "analysis": result,
     }
+
+
+@app.get(
+    "/requests/{request_id}/provider-selection",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_provider_selection(request_id: UUID):
+    try:
+        selection = get_provider_selection(request_id)
+    except ProviderSelectionValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if selection is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Provider selection not found",
+        )
+
+    return selection
+
+
+@app.post("/requests/{request_id}/provider-selection")
+def select_request_providers(
+    request_id: UUID,
+    decision: ProviderSelectionDecision,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return select_providers_for_request(
+            request_id,
+            decision.service_slug,
+            decision.area_key,
+            decision.provider_ids,
+            actor=operator.actor,
+            reason=decision.reason,
+        )
+    except ProviderSelectionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ProviderSelectionValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        ProviderSelectionStateError,
+        ProviderSelectionEligibilityError,
+        ProviderSelectionConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.post("/requests/{request_id}/approve")
