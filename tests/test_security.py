@@ -289,6 +289,14 @@ class RouteAuthorizationTests(unittest.TestCase):
             ("POST", f"/requests/{self.request_id}/reply", {"message": "Test"}, OPERATOR_KEY, INBOUND_KEY),
             ("POST", f"/requests/{self.request_id}/approve", {}, OPERATOR_KEY, INBOUND_KEY),
             ("POST", f"/requests/{self.request_id}/reject", {}, OPERATOR_KEY, INBOUND_KEY),
+            ("GET", f"/requests/{self.request_id}/provider-selection", None, OPERATOR_KEY, INBOUND_KEY),
+            ("POST", f"/requests/{self.request_id}/provider-selection", {
+                "service_slug": "plumbing",
+                "area_key": "bn:brunei-muara",
+                "provider_ids": [str(uuid4())],
+            }, OPERATOR_KEY, INBOUND_KEY),
+            ("GET", f"/requests/{self.request_id}/rfq-handoff", None, OPERATOR_KEY, INBOUND_KEY),
+            ("POST", f"/requests/{self.request_id}/rfq-handoff", None, OPERATOR_KEY, INBOUND_KEY),
             ("POST", f"/requests/{self.request_id}/tools/prepare_customer_follow_up", None, OPERATOR_KEY, INBOUND_KEY),
         ]
         for method, path, body, correct, wrong in paths:
