@@ -202,15 +202,44 @@ RFQ preparation writes `rfq_handoff_prepared` in the same transaction. Exact ret
 
 An RFQ may be prepared only while the request is `ready` or `approved`. Once already prepared, an exact retry returns the immutable RFQ even if the request later moves to another status.
 
+## RFQ delivery / response-opportunity activation
+
+Delivery activation is intentionally split into two internal state transitions:
+
+1. `prepared -> authorized`
+2. `authorized -> delivered`
+
+Authorization:
+
+- requires operator `decide`;
+- re-checks current provider eligibility for the RFQ's exact service and area;
+- records `rfq_delivery_authorized`;
+- performs no provider contact; and
+- does not start response-reliability timing.
+
+Delivery confirmation:
+
+- requires prior authorization;
+- requires an explicit timezone-aware response deadline;
+- re-checks current provider eligibility again;
+- records server-side delivery confirmation time;
+- moves the handoff to `delivered`;
+- creates exactly one `provider_response_opportunities` row using the durable handoff ID as `opportunity_id`;
+- records `rfq_delivery_confirmed`; and
+- starts response-reliability timing atomically with the delivery state transition.
+
+Exact retries are idempotent. A retry with a different response deadline fails closed.
+
+The service still performs no external email, WhatsApp, SMS or other provider send in this slice. A future authenticated delivery adapter must invoke the authorization gate before contact and confirm delivery immediately after successful send.
+
 ## Current exclusions
 
 This routing stage does not yet include:
 
 - executable provider ranking/reordering
 - automatic provider selection
-- RFQ delivery
-- provider contact
-- RFQ response deadline activation
+- live RFQ delivery transport
+- provider contact by this service
 - provider-response ingestion
 - fuzzy or proximity geography matching
 - availability windows or capacity scoring
@@ -238,3 +267,5 @@ The response-reliability PostgreSQL proof verifies a 90-day history window, excl
 The provider-selection PostgreSQL proof verifies current eligibility enforcement, immutable/idempotent human decisions, audit-event persistence, rejection of ineligible providers, request-state gating, and preservation of the original decision after later eligibility changes. Authorization tests prove that selection requires `decide` while retrieval requires only `read`.
 
 The RFQ-handoff PostgreSQL proof verifies deterministic preparation from the immutable human selection, stable provider-specific handoff identities, privacy-minimized RFQ snapshots, one preparation audit event, idempotent retries after later request-state changes, required selection/state gates, and the critical negative guarantee that preparation creates no response-reliability opportunities. Authorization tests prove that preparation requires `decide` while retrieval requires only `read`.
+
+The RFQ-delivery PostgreSQL proof verifies eligibility revalidation before authorization and again before confirmation, required transition order, one delivery audit event per transition, deterministic handoff-backed response-opportunity creation, idempotent confirmation, and fail-closed conflicting deadlines. Authorization tests prove both activation routes require `decide`.
