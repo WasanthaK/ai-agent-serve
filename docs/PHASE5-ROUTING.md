@@ -283,6 +283,27 @@ The ranking:
 
 Provider selection remains human-only and is not modified by ranking.
 
+## Normalized quote foundation
+
+A normalized commercial quote may be recorded only after the corresponding RFQ handoff is delivered and a governed provider response of kind `quote` exists.
+
+The normalized record captures deterministic structured fields only:
+
+- `amount_minor`
+- three-letter uppercase `currency`
+- `scope_summary`
+- `exclusions[]`
+- `terms[]`
+- optional `available_from`
+- optional `estimated_duration_days`
+- optional `validity_expires_at`
+
+The record is immutable and idempotent. A conflicting retry fails closed.
+
+Write access requires operator `decide`; retrieval requires `read`.
+
+This slice performs no quotation-document parsing, model extraction, quote comparison, recommendation, provider selection, or award.
+
 ## Current exclusions
 
 This routing stage does not yet include:
@@ -322,3 +343,6 @@ The RFQ-delivery PostgreSQL proof verifies eligibility revalidation before autho
 The provider-response ingestion PostgreSQL proof verifies that only delivered handoffs accept quote/decline evidence, response timestamps cannot predate delivery, exact retries are idempotent, conflicting evidence fails closed, and the audit event is transactional.
 
 The ranking-readiness PostgreSQL proof verifies that readiness is derived from the current deterministic eligible-provider set plus persisted response history and that one insufficient-history provider blocks the whole set. The same PostgreSQL proof now executes deterministic reliability ranking after readiness succeeds and verifies that no provider is automatically selected.
+
+
+The normalized-quote PostgreSQL proof verifies that only delivered handoffs with a governed quote response can be normalized, exact retries are idempotent, conflicting normalized data fails closed, decline responses cannot become quotes, and one audit event is recorded transactionally.
