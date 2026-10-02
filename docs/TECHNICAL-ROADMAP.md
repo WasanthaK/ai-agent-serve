@@ -217,32 +217,37 @@ Completed:
 - candidate output exposes only provider ID and display name
 - an empty candidate set returns `no_eligible_provider` and requires human review
 - PostgreSQL proof verifies persisted compliance is enforced before candidate construction
-
-Completed:
-
-- deterministic candidate construction implemented and CI-verified in PR #34
 - deterministic routing explanation implemented and CI-verified in PR #35
 - explanations reconstruct candidates internally from persisted eligibility
 - explanations are explicitly unranked and unselected
 - empty-result explanations do not invent provider-specific failure reasons
+- ranking-policy governance implemented and CI-verified in PR #36
+- ranking remains disabled by default
+- eligibility gates cannot be converted into ranking points
+- future ranking factors require deterministic evidence, normalization, missing-data, freshness and weight rules
+- provider selection remains human-only and ties require human review
 
 Current bounded work:
 
-- define a versioned ranking-policy contract without implementing scoring
-- keep approval, service capability, exact coverage area, availability and compliance as eligibility gates rather than ranking points
-- keep ranking disabled until deterministic comparable factor data exists
-- require every future factor to declare evidence source, direction, normalization, missing-data handling, freshness and weight
-- require enabled weights to total exactly 100
-- prohibit provider ID/creation order, model preference, protected characteristics and undisclosed commercial priority as ranking inputs
-- keep provider selection human-only and route ties to human review
-- do not calculate scores, reorder candidates, select providers, contact providers, dispatch work or hand off an RFQ in this slice
+- add governed historical response-reliability evidence as the first selected ranking factor
+- persist response opportunities separately from provider quote/decline responses
+- count an on-time quote or on-time decline as a reliable response
+- count late responses and expired no-response opportunities as completed but not on time
+- exclude still-open opportunities from the metric
+- use a rolling 90-day history window
+- require at least 5 completed opportunities before producing a reliability score
+- expose reliability as deterministic basis points from 0 to 10,000
+- keep providers with insufficient history unscored rather than assigning a low score
+- keep the factor defined but inactive until real RFQ handoff generates governed production history
+- do not reorder candidates, select providers, contact providers, dispatch work or hand off an RFQ in this slice
 
 Routing roadmap:
 
 - Deterministic candidate construction — complete
 - Routing explanation from deterministic evidence — complete
-- Ranking policy design — in progress
-- Deterministic ranking/scoring implementation — only after policy factors have real governed data
+- Ranking policy design — complete
+- Historical response-reliability evidence foundation — in progress
+- Deterministic ranking/reordering — only after real governed response history exists
 - Human-approved provider selection
 - RFQ handoff
 

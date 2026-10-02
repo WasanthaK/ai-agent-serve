@@ -2,6 +2,7 @@ import unittest
 
 from provider_ranking_policy import (
     CURRENT_PROVIDER_RANKING_POLICY,
+    RESPONSE_RELIABILITY_FACTOR_POLICY,
     ProviderRankingPolicy,
     RankingFactorPolicy,
     RankingPolicyValidationError,
@@ -29,6 +30,29 @@ class ProviderRankingPolicyTests(unittest.TestCase):
         self.assertEqual(validated.factors, ())
         self.assertEqual(validated.selection_mode, "human_only")
         self.assertEqual(validated.tie_policy, "human_review")
+
+    def test_response_reliability_factor_is_governed_but_not_active(self):
+        factor_policy = RESPONSE_RELIABILITY_FACTOR_POLICY
+
+        self.assertEqual(factor_policy.name, "response_reliability")
+        self.assertEqual(factor_policy.weight, 100)
+        self.assertEqual(factor_policy.direction, "higher_is_better")
+        self.assertEqual(
+            factor_policy.evidence_source,
+            "provider_response_reliability_v1",
+        )
+        self.assertIn("10000", factor_policy.normalization_rule)
+        self.assertIn("5", factor_policy.missing_data_rule)
+        self.assertIn("90", factor_policy.freshness_rule)
+        self.assertEqual(CURRENT_PROVIDER_RANKING_POLICY.factors, ())
+        self.assertFalse(CURRENT_PROVIDER_RANKING_POLICY.enabled)
+
+        proposed = ProviderRankingPolicy(
+            version="1.0.0",
+            enabled=True,
+            factors=(factor_policy,),
+        )
+        self.assertIs(validate_provider_ranking_policy(proposed), proposed)
 
     def test_enabled_policy_requires_governed_factors_totaling_100(self):
         policy = ProviderRankingPolicy(

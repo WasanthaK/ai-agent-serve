@@ -61,6 +61,21 @@ class ProviderRankingPolicy:
     tie_policy: str = HUMAN_TIE_POLICY
 
 
+RESPONSE_RELIABILITY_FACTOR_POLICY = RankingFactorPolicy(
+    name="response_reliability",
+    weight=100,
+    direction="higher_is_better",
+    evidence_source="provider_response_reliability_v1",
+    normalization_rule=(
+        "reliability_bps=floor(on_time_responses*10000/completed_opportunities)"
+    ),
+    missing_data_rule=(
+        "fewer_than_5_completed_opportunities=insufficient_history_and_not_scored"
+    ),
+    freshness_rule="rolling_90_day_window_at_evaluation_time",
+)
+
+
 CURRENT_PROVIDER_RANKING_POLICY = ProviderRankingPolicy(
     version="1.0.0",
     enabled=False,
