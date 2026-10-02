@@ -451,6 +451,46 @@ class RouteAuthorizationTests(unittest.TestCase):
                 "operator:wasantha",
             )
 
+    def test_quote_award_requires_decide_permission(self):
+        recommendation_id = uuid4()
+        payload = {
+            "recommendation_id": str(recommendation_id),
+            "reason": "Human confirmed award",
+        }
+        result = {
+            "award_id": str(uuid4()),
+            "request_id": str(self.request_id),
+            "recommendation_id": str(recommendation_id),
+            "award_authority": "human",
+            "provider_contacted": False,
+            "dispatch_created": False,
+            "request_status_changed": False,
+        }
+
+        with patch.object(
+            api,
+            "award_recommended_quote",
+            return_value=result,
+        ) as award:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/quote-award",
+                json=payload,
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            award.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/quote-award",
+                json=payload,
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                award.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)
