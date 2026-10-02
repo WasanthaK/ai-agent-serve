@@ -56,6 +56,10 @@ def _normalize_actor(actor: str) -> str:
         raise ProviderSelectionValidationError("actor is required")
     if len(normalized) > 200:
         raise ProviderSelectionValidationError("actor is too long")
+    if not normalized.startswith("operator:"):
+        raise ProviderSelectionValidationError(
+            "provider selection authority must be an operator"
+        )
     return normalized
 
 
@@ -112,9 +116,9 @@ def _selection_result(cursor, decision):
         """,
         (decision["id"],),
     )
-    selected_provider_ids = [
+    selected_provider_ids = sorted(
         str(row["provider_id"]) for row in cursor.fetchall()
-    ]
+    )
 
     return {
         "selection_id": str(decision["id"]),
