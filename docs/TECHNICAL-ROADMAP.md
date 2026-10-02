@@ -293,15 +293,24 @@ Completed ranking-readiness guard:
 - one insufficient-history provider blocks ranking for the whole set
 - readiness itself never sorts or selects providers
 
+Completed deterministic response-reliability ranking:
+
+- governed response-reliability ranking implemented and CI-verified in PR #44
+- ranking executes only when readiness succeeds
+- candidates are ordered by deterministic reliability basis points
+- equal scores share the same rank position
+- ties require human review
+- provider selection remains human-only with no automatic selection
+
 Current bounded work:
 
-- enable only governed `response_reliability` ranking at 100% weight
-- execute ranking only when readiness succeeds
-- order candidates by deterministic reliability basis points, highest first
-- give equal scores the same rank position
-- require human review when ties exist
-- keep provider selection human-only and `selected_provider_id = null`
-- do not contact providers, evaluate quote content, dispatch work, or alter eligibility
+- add one immutable normalized commercial quote record for each governed provider `quote` response
+- require a delivered RFQ handoff and persisted quote response before normalization
+- capture amount in minor units, three-letter currency, scope summary, exclusions and terms
+- optionally capture available-from date, estimated duration and validity expiry
+- require operator `decide` to write and `read` to retrieve
+- make exact retries idempotent and conflicting normalized data fail closed
+- do not parse quotation documents, use model extraction, compare quotes, recommend providers, or award work in this slice
 
 Routing roadmap:
 
@@ -314,7 +323,7 @@ Routing roadmap:
 - RFQ delivery / response-opportunity activation — complete
 - Provider-response ingestion — complete
 - Ranking-readiness guard — complete
-- Deterministic response-reliability ranking — in progress
+- Deterministic response-reliability ranking — complete
 
 Target routing behavior:
 
@@ -325,9 +334,9 @@ Target routing behavior:
 
 ### Quotation workflow
 
-- Create structured requests for quotation — foundation in progress
-- Collect provider responses
-- Normalize different quotation formats
+- Create structured requests for quotation — foundation complete
+- Collect provider responses — structured response ingestion complete
+- Normalize different quotation formats — in progress
 - Detect missing scope, exclusions and terms
 - Compare price, availability, scope and risk
 - Present recommendations for human approval

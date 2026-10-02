@@ -111,3 +111,4 @@ jobs:
           PYTHONPATH=. python tests/integration_rfq_delivery.py -q
           PYTHONPATH=. python tests/integration_rfq_response.py -q
           PYTHONPATH=. python tests/integration_provider_ranking_readiness.py -q
+          PYTHONPATH=. python tests/integration_quote_normalization.py -q

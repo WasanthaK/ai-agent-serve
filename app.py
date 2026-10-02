@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
 
@@ -75,6 +75,14 @@ from rfq_response import (
     RFQResponseValidationError,
     ingest_rfq_response,
 )
+from quote_normalization import (
+    QuoteNormalizationConflictError,
+    QuoteNormalizationNotFoundError,
+    QuoteNormalizationStateError,
+    QuoteNormalizationValidationError,
+    get_normalized_quote,
+    normalize_structured_quote,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -134,6 +142,17 @@ class RFQDeliveryConfirmation(BaseModel):
 class RFQProviderResponse(BaseModel):
     response_kind: str = Field(min_length=1, max_length=20)
     responded_at: datetime
+
+
+class NormalizedQuoteInput(BaseModel):
+    amount_minor: int = Field(ge=0)
+    currency: str = Field(min_length=3, max_length=3)
+    scope_summary: str = Field(min_length=1, max_length=5000)
+    exclusions: list[str] = Field(default_factory=list)
+    terms: list[str] = Field(default_factory=list)
+    available_from: Optional[date] = None
+    estimated_duration_days: Optional[int] = Field(default=None, gt=0)
+    validity_expires_at: Optional[datetime] = None
 
 
 class CustomerReply(BaseModel):
@@ -732,6 +751,59 @@ def record_request_rfq_provider_response(
     except (
         RFQResponseStateError,
         RFQResponseConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/rfq-handoffs/{handoff_id}/normalized-quote",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_normalized_quote(
+    request_id: UUID,
+    handoff_id: UUID,
+):
+    try:
+        quote = get_normalized_quote(request_id, handoff_id)
+    except QuoteNormalizationValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if quote is None:
+        raise HTTPException(status_code=404, detail="Normalized quote not found")
+
+    return quote
+
+
+@app.post(
+    "/requests/{request_id}/rfq-handoffs/{handoff_id}/normalized-quote"
+)
+def record_normalized_quote(
+    request_id: UUID,
+    handoff_id: UUID,
+    quote: NormalizedQuoteInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return normalize_structured_quote(
+            request_id,
+            handoff_id,
+            amount_minor=quote.amount_minor,
+            currency=quote.currency,
+            scope_summary=quote.scope_summary,
+            exclusions=quote.exclusions,
+            terms=quote.terms,
+            available_from=quote.available_from,
+            estimated_duration_days=quote.estimated_duration_days,
+            validity_expires_at=quote.validity_expires_at,
+            actor=operator.actor,
+        )
+    except QuoteNormalizationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except QuoteNormalizationValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        QuoteNormalizationStateError,
+        QuoteNormalizationConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
