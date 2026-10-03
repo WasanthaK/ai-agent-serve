@@ -99,8 +99,8 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             for item in rfq["provider_handoffs"]
         }
 
-        as_of = datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc)
         quote_ids = {}
+        comparison_as_of = None
 
         for provider_id, amount in (
             (first, 120000),
@@ -112,17 +112,19 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
                 handoff_id,
                 actor="operator:ci",
             )
-            confirm_rfq_delivery(
+            delivered = confirm_rfq_delivery(
                 request_id,
                 handoff_id,
-                as_of + timedelta(hours=24),
+                datetime.now(timezone.utc) + timedelta(hours=24),
                 actor="operator:ci",
             )
+            responded_at = delivered["delivered_at"] + timedelta(seconds=1)
+            comparison_as_of = responded_at
             ingest_rfq_response(
                 request_id,
                 handoff_id,
                 "quote",
-                as_of,
+                responded_at,
                 actor="operator:ci",
             )
             normalized = normalize_structured_quote(
@@ -135,7 +137,7 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
                 terms=["Payment on completion"],
                 available_from=date(2026, 10, 10),
                 estimated_duration_days=1,
-                validity_expires_at=as_of + timedelta(days=14),
+                validity_expires_at=responded_at + timedelta(days=14),
                 actor="operator:ci",
             )
             quote_ids[provider_id] = UUID(
