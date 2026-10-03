@@ -491,6 +491,43 @@ class RouteAuthorizationTests(unittest.TestCase):
                 "operator:wasantha",
             )
 
+    def test_delivery_handoff_requires_decide_permission(self):
+        award_id = uuid4()
+        payload = {"award_id": str(award_id)}
+        result = {
+            "delivery_handoff_id": str(uuid4()),
+            "request_id": str(self.request_id),
+            "award_id": str(award_id),
+            "request_status": "actioned",
+            "provider_contacted": False,
+            "dispatch_created": False,
+            "appointment_created": False,
+        }
+
+        with patch.object(
+            api,
+            "activate_delivery_handoff",
+            return_value=result,
+        ) as activate:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/delivery-handoff",
+                json=payload,
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            activate.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/delivery-handoff",
+                json=payload,
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                activate.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)
