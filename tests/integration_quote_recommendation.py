@@ -17,6 +17,12 @@ from quote_recommendation import (
     get_quote_recommendation,
     recommend_quote_for_request,
 )
+from quote_award import (
+    QuoteAwardConflictError,
+    QuoteAwardEligibilityError,
+    award_recommended_quote,
+    get_quote_award,
+)
 from rfq_delivery import authorize_rfq_delivery, confirm_rfq_delivery
 from rfq_handoff import prepare_rfq_handoff
 from rfq_response import ingest_rfq_response
@@ -93,8 +99,8 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             for item in rfq["provider_handoffs"]
         }
 
-        as_of = datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc)
         quote_ids = {}
+        comparison_as_of = None
 
         for provider_id, amount in (
             (first, 120000),
@@ -106,17 +112,19 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
                 handoff_id,
                 actor="operator:ci",
             )
-            confirm_rfq_delivery(
+            delivered = confirm_rfq_delivery(
                 request_id,
                 handoff_id,
-                as_of + timedelta(hours=24),
+                datetime.now(timezone.utc) + timedelta(hours=24),
                 actor="operator:ci",
             )
+            responded_at = delivered["delivered_at"] + timedelta(seconds=1)
+            comparison_as_of = responded_at
             ingest_rfq_response(
                 request_id,
                 handoff_id,
                 "quote",
-                as_of,
+                responded_at,
                 actor="operator:ci",
             )
             normalized = normalize_structured_quote(
@@ -129,7 +137,7 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
                 terms=["Payment on completion"],
                 available_from=date(2026, 10, 10),
                 estimated_duration_days=1,
-                validity_expires_at=as_of + timedelta(days=14),
+                validity_expires_at=responded_at + timedelta(days=14),
                 actor="operator:ci",
             )
             quote_ids[provider_id] = UUID(
@@ -191,6 +199,59 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         )
         self.assertFalse(
             recommendation_events[0]["details"]["provider_contacted"]
+        )
+
+        set_provider_compliance(second, "non_compliant")
+        with self.assertRaises(QuoteAwardEligibilityError):
+            award_recommended_quote(
+                request_id,
+                UUID(first_result["recommendation_id"]),
+                reason="Human confirmed award after reviewing comparison.",
+                actor="operator:ci",
+            )
+        set_provider_compliance(second, "compliant")
+
+        award = award_recommended_quote(
+            request_id,
+            UUID(first_result["recommendation_id"]),
+            reason="Human confirmed award after reviewing comparison.",
+            actor="operator:ci",
+        )
+        award_retry = award_recommended_quote(
+            request_id,
+            UUID(first_result["recommendation_id"]),
+            reason="Human confirmed award after reviewing comparison.",
+            actor="operator:ci",
+        )
+
+        self.assertEqual(award_retry["award_id"], award["award_id"])
+        self.assertEqual(award["normalized_quote_id"], str(chosen))
+        self.assertEqual(award["award_authority"], "human")
+        self.assertFalse(award["provider_contacted"])
+        self.assertFalse(award["dispatch_created"])
+        self.assertFalse(award["request_status_changed"])
+
+        with self.assertRaises(QuoteAwardConflictError):
+            award_recommended_quote(
+                request_id,
+                UUID(first_result["recommendation_id"]),
+                reason="Different award reason",
+                actor="operator:ci",
+            )
+
+        persisted_award = get_quote_award(request_id)
+        self.assertEqual(persisted_award["award_id"], award["award_id"])
+
+        award_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"] == "quote_award_recorded"
+        ]
+        self.assertEqual(len(award_events), 1)
+        self.assertFalse(award_events[0]["details"]["provider_contacted"])
+        self.assertFalse(award_events[0]["details"]["dispatch_created"])
+        self.assertFalse(
+            award_events[0]["details"]["request_status_changed"]
         )
 
 

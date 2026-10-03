@@ -99,6 +99,14 @@ from quote_recommendation import (
     get_quote_recommendation,
     recommend_quote_for_request,
 )
+from quote_award import (
+    QuoteAwardConflictError,
+    QuoteAwardEligibilityError,
+    QuoteAwardNotFoundError,
+    QuoteAwardValidationError,
+    award_recommended_quote,
+    get_quote_award,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -174,6 +182,11 @@ class NormalizedQuoteInput(BaseModel):
 class QuoteRecommendationInput(BaseModel):
     normalized_quote_id: UUID
     rationale: str = Field(min_length=1, max_length=2000)
+
+
+class QuoteAwardInput(BaseModel):
+    recommendation_id: UUID
+    reason: str = Field(min_length=1, max_length=2000)
 
 
 class CustomerReply(BaseModel):
@@ -897,6 +910,45 @@ def record_quote_recommendation(
         QuoteRecommendationEligibilityError,
         QuoteRecommendationConflictError,
         QuoteComparisonNotReadyError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/quote-award",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_quote_award(request_id: UUID):
+    try:
+        award = get_quote_award(request_id)
+    except QuoteAwardValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if award is None:
+        raise HTTPException(status_code=404, detail="Quote award not found")
+    return award
+
+
+@app.post("/requests/{request_id}/quote-award")
+def record_quote_award(
+    request_id: UUID,
+    award: QuoteAwardInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return award_recommended_quote(
+            request_id,
+            award.recommendation_id,
+            reason=award.reason,
+            actor=operator.actor,
+        )
+    except QuoteAwardNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except QuoteAwardValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        QuoteAwardEligibilityError,
+        QuoteAwardConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 

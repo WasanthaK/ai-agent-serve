@@ -89,7 +89,7 @@ class QuoteComparisonIntegrationTests(unittest.TestCase):
             for item in rfq["provider_handoffs"]
         }
 
-        as_of = datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc)
+        comparison_as_of = None
 
         for provider_id, amount, available, duration in (
             (first, 120000, date(2026, 10, 8), 2),
@@ -101,17 +101,19 @@ class QuoteComparisonIntegrationTests(unittest.TestCase):
                 handoff_id,
                 actor="operator:ci",
             )
-            confirm_rfq_delivery(
+            delivered = confirm_rfq_delivery(
                 request_id,
                 handoff_id,
-                as_of + timedelta(hours=24),
+                datetime.now(timezone.utc) + timedelta(hours=24),
                 actor="operator:ci",
             )
+            responded_at = delivered["delivered_at"] + timedelta(seconds=1)
+            comparison_as_of = responded_at
             ingest_rfq_response(
                 request_id,
                 handoff_id,
                 "quote",
-                as_of,
+                responded_at,
                 actor="operator:ci",
             )
             normalize_structured_quote(
@@ -124,11 +126,14 @@ class QuoteComparisonIntegrationTests(unittest.TestCase):
                 terms=["Payment on completion"],
                 available_from=available,
                 estimated_duration_days=duration,
-                validity_expires_at=as_of + timedelta(days=14),
+                validity_expires_at=responded_at + timedelta(days=14),
                 actor="operator:ci",
             )
 
-        result = compare_request_quotes(request_id, as_of=as_of)
+        result = compare_request_quotes(
+            request_id,
+            as_of=comparison_as_of,
+        )
 
         self.assertEqual(result["quote_count"], 2)
         self.assertTrue(result["price_comparable"])
