@@ -404,6 +404,32 @@ The award result explicitly states:
 
 This slice creates decision evidence only. Provider notification, dispatch and request-state transition remain separate future actions.
 
+## Post-award delivery handoff
+
+The post-award handoff is the first internal Phase 6 transition.
+
+`POST /requests/{request_id}/delivery-handoff` requires operator `decide`. Retrieval requires `read`.
+
+Activation requires an existing human quote award for the same request and snapshots the awarded commercial facts:
+
+- provider ID;
+- normalized quote ID;
+- amount and currency;
+- scope summary;
+- exclusions and terms;
+- optional availability date; and
+- optional estimated duration.
+
+The handoff and request-state transition are one transaction. The request moves from `ready` or `approved` to the existing `actioned` state and receives `actioned_at`.
+
+The result explicitly states:
+
+- `provider_contacted = false`;
+- `dispatch_created = false`; and
+- `appointment_created = false`.
+
+No message, appointment, dispatch, or external side effect is performed in this slice.
+
 ## Current exclusions
 
 This routing stage does not yet include:
@@ -458,3 +484,6 @@ The human quote-recommendation PostgreSQL proof verifies that recommendations ar
 
 
 The human quote-award PostgreSQL proof extends the recommendation flow through award, verifies that a newly non-compliant recommended provider blocks award until eligibility is restored, proves exact retry idempotency and conflicting retry rejection, and verifies one audit event with no provider contact, dispatch, or request-state mutation.
+
+
+The post-award PostgreSQL proof extends the governed recommendation/award flow through delivery handoff, verifies the immutable award snapshot, atomic transition to `actioned`, exact retry idempotency, one audit event, and the absence of provider contact, dispatch and appointment creation.
