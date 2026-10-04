@@ -528,6 +528,37 @@ class RouteAuthorizationTests(unittest.TestCase):
                 "operator:wasantha",
             )
 
+    def test_delivery_notification_preparation_requires_decide_permission(self):
+        result = {
+            "request_id": str(self.request_id),
+            "delivery_handoff_id": str(uuid4()),
+            "notifications": [],
+            "destinations_resolved": False,
+            "sent": False,
+        }
+
+        with patch.object(
+            api,
+            "prepare_delivery_notifications",
+            return_value=result,
+        ) as prepare:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/delivery-notifications",
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            prepare.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/delivery-notifications",
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                prepare.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)
