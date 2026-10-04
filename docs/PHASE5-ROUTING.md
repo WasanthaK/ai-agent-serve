@@ -430,6 +430,32 @@ The result explicitly states:
 
 No message, appointment, dispatch, or external side effect is performed in this slice.
 
+## Delivery notification preparation
+
+Post-award notification preparation creates exactly two durable records from the immutable delivery handoff:
+
+- one customer notification with purpose `award_confirmation`; and
+- one provider notification with purpose `award_notification`.
+
+Message subject/body content is deterministic and derived only from persisted delivery facts such as price, currency and scope.
+
+The current provider directory contains provider identity/display data but no governed delivery destination. Therefore this slice deliberately persists:
+
+- `destination_channel = null`; and
+- `destination_address = null`.
+
+Customer delivery destination is also left unresolved rather than treating the inbound request source as outbound authority.
+
+Preparation requires operator `decide`; retrieval requires `read`. Repeated preparation returns the same durable records and does not duplicate the audit event.
+
+Every prepared notification explicitly reports:
+
+- `status = prepared`;
+- `sent = false`; and
+- `external_action_performed = false`.
+
+No email, WhatsApp, SMS or other outbound transport is invoked in this slice.
+
 ## Current exclusions
 
 This routing stage does not yet include:
@@ -487,3 +513,6 @@ The human quote-award PostgreSQL proof extends the recommendation flow through a
 
 
 The post-award PostgreSQL proof extends the governed recommendation/award flow through delivery handoff, verifies the immutable award snapshot, atomic transition to `actioned`, exact retry idempotency, one audit event, and the absence of provider contact, dispatch and appointment creation.
+
+
+The Phase 6 notification-preparation PostgreSQL proof extends the governed quote recommendation -> human award -> delivery handoff flow and verifies exactly one customer plus one provider notification, stable retry identities, unresolved destinations, one preparation audit event, and zero external sends.
