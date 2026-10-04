@@ -2,7 +2,7 @@ import unittest
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
-from db import get_connection, get_request_events, save_request
+from db import get_connection, get_request, get_request_events, save_request
 from provider_directory import (
     add_provider_coverage_area,
     add_provider_service_capability,
@@ -26,6 +26,10 @@ from quote_award import (
 from rfq_delivery import authorize_rfq_delivery, confirm_rfq_delivery
 from rfq_handoff import prepare_rfq_handoff
 from rfq_response import ingest_rfq_response
+from delivery_handoff import (
+    activate_delivery_handoff,
+    get_delivery_handoff,
+)
 
 
 def ready_analysis():
@@ -252,6 +256,57 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         self.assertFalse(award_events[0]["details"]["dispatch_created"])
         self.assertFalse(
             award_events[0]["details"]["request_status_changed"]
+        )
+
+        delivery = activate_delivery_handoff(
+            request_id,
+            UUID(award["award_id"]),
+            actor="operator:ci",
+        )
+        delivery_retry = activate_delivery_handoff(
+            request_id,
+            UUID(award["award_id"]),
+            actor="operator:ci",
+        )
+
+        self.assertEqual(
+            delivery_retry["delivery_handoff_id"],
+            delivery["delivery_handoff_id"],
+        )
+        self.assertEqual(delivery["request_status"], "actioned")
+        self.assertEqual(delivery["provider_id"], str(second))
+        self.assertEqual(delivery["amount_minor"], 100000)
+        self.assertEqual(delivery["currency"], "AUD")
+        self.assertFalse(delivery["provider_contacted"])
+        self.assertFalse(delivery["dispatch_created"])
+        self.assertFalse(delivery["appointment_created"])
+
+        persisted_delivery = get_delivery_handoff(request_id)
+        self.assertEqual(
+            persisted_delivery["delivery_handoff_id"],
+            delivery["delivery_handoff_id"],
+        )
+        self.assertEqual(get_request(request_id)["status"], "actioned")
+        self.assertIsNotNone(get_request(request_id)["actioned_at"])
+
+        delivery_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"] == "delivery_handoff_activated"
+        ]
+        self.assertEqual(len(delivery_events), 1)
+        self.assertEqual(
+            delivery_events[0]["details"]["new_status"],
+            "actioned",
+        )
+        self.assertFalse(
+            delivery_events[0]["details"]["provider_contacted"]
+        )
+        self.assertFalse(
+            delivery_events[0]["details"]["dispatch_created"]
+        )
+        self.assertFalse(
+            delivery_events[0]["details"]["appointment_created"]
         )
 
 

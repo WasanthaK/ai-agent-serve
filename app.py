@@ -107,6 +107,14 @@ from quote_award import (
     award_recommended_quote,
     get_quote_award,
 )
+from delivery_handoff import (
+    DeliveryHandoffConflictError,
+    DeliveryHandoffNotFoundError,
+    DeliveryHandoffStateError,
+    DeliveryHandoffValidationError,
+    activate_delivery_handoff,
+    get_delivery_handoff,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -187,6 +195,10 @@ class QuoteRecommendationInput(BaseModel):
 class QuoteAwardInput(BaseModel):
     recommendation_id: UUID
     reason: str = Field(min_length=1, max_length=2000)
+
+
+class DeliveryHandoffInput(BaseModel):
+    award_id: UUID
 
 
 class CustomerReply(BaseModel):
@@ -949,6 +961,47 @@ def record_quote_award(
     except (
         QuoteAwardEligibilityError,
         QuoteAwardConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/delivery-handoff",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_delivery_handoff(request_id: UUID):
+    try:
+        handoff = get_delivery_handoff(request_id)
+    except DeliveryHandoffValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if handoff is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Delivery handoff not found",
+        )
+    return handoff
+
+
+@app.post("/requests/{request_id}/delivery-handoff")
+def activate_request_delivery_handoff(
+    request_id: UUID,
+    payload: DeliveryHandoffInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return activate_delivery_handoff(
+            request_id,
+            payload.award_id,
+            actor=operator.actor,
+        )
+    except DeliveryHandoffNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DeliveryHandoffValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        DeliveryHandoffStateError,
+        DeliveryHandoffConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 

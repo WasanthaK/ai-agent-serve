@@ -337,16 +337,24 @@ Completed human quote recommendation:
 - writes require operator `decide`; reads require `read`
 - recommendation creates no award, provider contact, request-state change or dispatch
 
+Completed human quote award:
+
+- immutable human quote award implemented and CI-verified in PR #49
+- award is tied to the existing human recommendation
+- quote comparison-readiness and current provider eligibility are re-checked at award time
+- writes require operator `decide`; reads require `read`
+- exact retries are idempotent and conflicting awards fail closed
+- award creates no provider contact, dispatch, or request-state mutation
+
 Current bounded work:
 
-- let a human operator record one immutable quote award tied to the existing recommendation
-- require the awarded quote to remain comparison-ready at award time
-- re-check current provider eligibility for the RFQ's exact service and area inside the award transaction
-- require explicit human award reason
-- require operator `decide` to record and `read` to retrieve
-- make exact retries idempotent and conflicting awards fail closed
-- write `quote_award_recorded` transactionally
-- do not contact the provider, create dispatch, or change request status in this slice
+- create one immutable internal service-delivery handoff from the human quote award
+- snapshot awarded provider, price, currency, scope, exclusions, terms, availability and duration
+- atomically transition the request to the existing `actioned` status and set `actioned_at`
+- require operator `decide` to activate and `read` to retrieve
+- make exact retries idempotent and conflicting handoffs fail closed
+- write `delivery_handoff_activated` transactionally
+- do not contact the provider, create dispatch, create an appointment, or send notifications in this slice
 
 Routing roadmap:
 
@@ -375,11 +383,17 @@ Target routing behavior:
 - Normalize different quotation formats — foundation complete
 - Detect missing scope, exclusions and terms — complete
 - Compare price, availability, scope and risk — deterministic comparison complete
-- Present recommendations for human approval — recommendation complete; human award in progress
+- Present recommendations for human approval — complete through human award
 
 Purchase-order creation remains outside the initial scope.
 
 ## Phase 6 — Service-delivery coordination
+
+Current bounded work:
+
+- Post-award internal delivery handoff and request transition to `actioned`
+
+Planned next:
 
 - Appointment proposals and confirmation
 - Customer and provider notifications
