@@ -30,6 +30,10 @@ from delivery_handoff import (
     activate_delivery_handoff,
     get_delivery_handoff,
 )
+from delivery_notification import (
+    get_prepared_delivery_notifications,
+    prepare_delivery_notifications,
+)
 
 
 def ready_analysis():
@@ -307,6 +311,55 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         )
         self.assertFalse(
             delivery_events[0]["details"]["appointment_created"]
+        )
+
+        prepared = prepare_delivery_notifications(
+            request_id,
+            actor="operator:ci",
+        )
+        prepared_retry = prepare_delivery_notifications(
+            request_id,
+            actor="operator:ci",
+        )
+
+        self.assertEqual(len(prepared["notifications"]), 2)
+        self.assertEqual(
+            {
+                item["audience_type"]
+                for item in prepared["notifications"]
+            },
+            {"customer", "provider"},
+        )
+        self.assertEqual(
+            [item["notification_id"] for item in prepared_retry["notifications"]],
+            [item["notification_id"] for item in prepared["notifications"]],
+        )
+        self.assertFalse(prepared["destinations_resolved"])
+        self.assertFalse(prepared["sent"])
+        for item in prepared["notifications"]:
+            self.assertIsNone(item["destination_channel"])
+            self.assertIsNone(item["destination_address"])
+            self.assertEqual(item["status"], "prepared")
+            self.assertFalse(item["sent"])
+            self.assertFalse(item["external_action_performed"])
+
+        persisted_notifications = get_prepared_delivery_notifications(
+            request_id
+        )
+        self.assertEqual(len(persisted_notifications), 2)
+
+        notification_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"] == "delivery_notifications_prepared"
+        ]
+        self.assertEqual(len(notification_events), 1)
+        self.assertFalse(
+            notification_events[0]["details"]["destinations_resolved"]
+        )
+        self.assertFalse(notification_events[0]["details"]["sent"])
+        self.assertFalse(
+            notification_events[0]["details"]["external_action_performed"]
         )
 
 
