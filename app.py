@@ -208,6 +208,14 @@ from skill_improvement import (
     create_skill_improvement_proposal,
     get_skill_improvement_proposals,
 )
+from skill_regression import (
+    SkillRegressionConflictError,
+    SkillRegressionNotFoundError,
+    SkillRegressionStateError,
+    SkillRegressionValidationError,
+    get_skill_regression_tests,
+    record_skill_regression_test,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -372,6 +380,21 @@ class SkillImprovementProposalInput(BaseModel):
     change_scope: str = Field(min_length=1, max_length=20)
     proposed_change: str = Field(min_length=1, max_length=12000)
     rationale: str = Field(min_length=1, max_length=4000)
+
+
+class SkillRegressionCaseInput(BaseModel):
+    case_id: str = Field(min_length=1, max_length=120)
+    purpose: str = Field(min_length=1, max_length=20)
+    baseline_result: str = Field(min_length=1, max_length=20)
+    candidate_result: str = Field(min_length=1, max_length=20)
+    notes: str = Field(min_length=1, max_length=2000)
+
+
+class SkillRegressionTestInput(BaseModel):
+    proposal_id: UUID
+    suite_name: str = Field(min_length=1, max_length=120)
+    suite_version: str = Field(min_length=1, max_length=120)
+    cases: list[SkillRegressionCaseInput] = Field(min_length=2, max_length=100)
 
 
 class CustomerReply(BaseModel):
@@ -691,6 +714,46 @@ def record_request_satisfaction_response(
     except (
         SatisfactionFollowUpStateError,
         SatisfactionFollowUpConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/skill-regression-tests",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_skill_regression_tests(request_id: UUID):
+    try:
+        return {
+            "request_id": str(request_id),
+            "regression_tests": get_skill_regression_tests(request_id),
+        }
+    except SkillRegressionValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/requests/{request_id}/skill-regression-tests")
+def create_request_skill_regression_test(
+    request_id: UUID,
+    payload: SkillRegressionTestInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return record_skill_regression_test(
+            request_id,
+            payload.proposal_id,
+            suite_name=payload.suite_name,
+            suite_version=payload.suite_version,
+            cases=[case.model_dump() for case in payload.cases],
+            actor=operator.actor,
+        )
+    except SkillRegressionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SkillRegressionValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        SkillRegressionStateError,
+        SkillRegressionConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
