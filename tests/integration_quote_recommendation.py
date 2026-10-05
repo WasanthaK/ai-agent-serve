@@ -57,8 +57,10 @@ from human_intervention import (
 )
 from delivery_timeline import get_delivery_timeline
 from satisfaction_follow_up import (
+    SatisfactionFollowUpConflictError,
     get_satisfaction_follow_up,
     prepare_satisfaction_follow_up,
+    record_satisfaction_response,
 )
 
 
@@ -831,6 +833,73 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         self.assertFalse(satisfaction_events[0]["details"]["sent"])
         self.assertFalse(
             satisfaction_events[0]["details"]["external_action_performed"]
+        )
+
+        responded_at = datetime.now(timezone.utc)
+        response = record_satisfaction_response(
+            request_id,
+            UUID(follow_up["follow_up_id"]),
+            rating=4,
+            responded_at=responded_at,
+            response_source="operator-recorded phone response",
+            comment="Service completed well.",
+            actor="operator:ci",
+        )
+        response_retry = record_satisfaction_response(
+            request_id,
+            UUID(follow_up["follow_up_id"]),
+            rating=4,
+            responded_at=responded_at,
+            response_source="operator-recorded phone response",
+            comment="Service completed well.",
+            actor="operator:ci",
+        )
+
+        self.assertEqual(
+            response_retry["follow_up_id"],
+            response["follow_up_id"],
+        )
+        self.assertEqual(response["status"], "responded")
+        self.assertEqual(response["rating"], 4)
+        self.assertEqual(response["comment"], "Service completed well.")
+        self.assertTrue(response["response_recorded"])
+        self.assertFalse(response["sent"])
+        self.assertFalse(response["external_action_performed"])
+
+        with self.assertRaises(SatisfactionFollowUpConflictError):
+            record_satisfaction_response(
+                request_id,
+                UUID(follow_up["follow_up_id"]),
+                rating=2,
+                responded_at=responded_at,
+                response_source="operator-recorded phone response",
+                comment="Different evidence",
+                actor="operator:ci",
+            )
+
+        persisted_response = get_satisfaction_follow_up(request_id)
+        self.assertEqual(persisted_response["status"], "responded")
+        self.assertEqual(persisted_response["rating"], 4)
+
+        response_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"]
+            == "customer_satisfaction_response_recorded"
+        ]
+        self.assertEqual(len(response_events), 1)
+        self.assertEqual(response_events[0]["details"]["rating"], 4)
+        self.assertFalse(
+            response_events[0]["details"]["review_request_created"]
+        )
+        self.assertFalse(
+            response_events[0]["details"]["complaint_created"]
+        )
+        self.assertFalse(
+            response_events[0]["details"]["rework_created"]
+        )
+        self.assertFalse(
+            response_events[0]["details"]["external_action_performed"]
         )
 
 
