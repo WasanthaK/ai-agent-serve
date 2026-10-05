@@ -19,6 +19,7 @@ TRAINING_STAGES = frozenset(
         "needs_regression_test",
         "regression_failed",
         "ready_for_promotion_review",
+        "promoted",
     }
 )
 DEFAULT_LIMIT = 50
@@ -92,12 +93,12 @@ def _supported_actions(stage):
         return ["record_regression_test"]
     if stage == "regression_failed":
         return ["create_improvement_revision"]
+    if stage == "ready_for_promotion_review":
+        return ["promote_skill"]
     return []
 
 
 def _blocked_reason(stage):
-    if stage == "ready_for_promotion_review":
-        return "promotion_not_supported"
     return None
 
 
@@ -144,6 +145,17 @@ def _result(row):
                 "created_at": row["revision_created_at"],
             }
         ),
+        "promotion": (
+            None
+            if row["promotion_id"] is None
+            else {
+                "promotion_id": str(row["promotion_id"]),
+                "promoted_skill_version": row["promoted_skill_version"],
+                "reason": row["promotion_reason"],
+                "promoted_by": row["promoted_by"],
+                "created_at": row["promotion_created_at"],
+            }
+        ),
         "regression": (
             None
             if row["regression_test_id"] is None
@@ -168,8 +180,8 @@ def _result(row):
         "training_stage": stage,
         "supported_actions": _supported_actions(stage),
         "blocked_reason": _blocked_reason(stage),
-        "promotion_supported": False,
-        "production_behaviour_changed": False,
+        "promotion_supported": stage == "ready_for_promotion_review",
+        "production_behaviour_changed": stage == "promoted",
     }
 
 
@@ -212,7 +224,14 @@ _PROJECTION_SQL = """
         t.candidate_failures,
         t.verdict AS regression_verdict,
         t.created_at AS regression_created_at,
+        pr.id AS promotion_id,
+        pr.promoted_skill_version,
+        pr.reason AS promotion_reason,
+        pr.promoted_by,
+        pr.created_at AS promotion_created_at,
         CASE
+            WHEN pr.id IS NOT NULL
+                THEN 'promoted'
             WHEN e.verdict = 'pass'
                 THEN 'accepted'
             WHEN p.id IS NULL
@@ -246,6 +265,8 @@ _PROJECTION_SQL = """
           AND t.proposal_id = p.id
           AND t.revision_id IS NULL
       )
+    LEFT JOIN service_skill_promotions pr
+      ON pr.regression_test_id = t.id
 """
 
 
