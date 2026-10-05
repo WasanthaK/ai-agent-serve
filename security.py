@@ -115,7 +115,7 @@ def _load_legacy_inbound_keys() -> list[str]:
     return inbound_keys
 
 
-def _load_channel_bound_inbound_credentials() -> tuple[tuple[bytes, str, str | None], ...]:
+def _load_channel_bound_inbound_credentials() -> tuple[tuple, ...]:
     configured = os.getenv("AGENT_INBOUND_CREDENTIALS", "")
     if not configured:
         return ()
@@ -174,7 +174,10 @@ def _load_channel_bound_inbound_credentials() -> tuple[tuple[bytes, str, str | N
             if any(hmac.compare_digest(digest, existing) for existing in digests):
                 raise RuntimeError("Inbound API keys must differ")
             digests.append(digest)
-            credentials.append((digest, source, tenant_key))
+            if tenant_key is None:
+                credentials.append((digest, source))
+            else:
+                credentials.append((digest, source, tenant_key))
     return tuple(credentials)
 
 
@@ -205,7 +208,8 @@ def load_credentials() -> tuple[tuple[bytes, ...], tuple[tuple[bytes, OperatorPr
     inbound_digests = tuple(digests)
 
     channel_credentials = _load_channel_bound_inbound_credentials() if channel_bound else ()
-    for digest, _source, _tenant_key in channel_credentials:
+    for binding in channel_credentials:
+        digest = binding[0]
         if any(hmac.compare_digest(digest, existing) for existing in digests):
             raise RuntimeError("Inbound API keys must differ")
         digests.append(digest)
@@ -307,11 +311,12 @@ def _authenticate_inbound(request: Request, key: str | None) -> str:
     tenant_key = None
 
     if digest is not None:
-        for (
-            candidate_digest,
-            candidate_source,
-            candidate_tenant_key,
-        ) in _CHANNEL_INBOUND_CREDENTIALS:
+        for binding in _CHANNEL_INBOUND_CREDENTIALS:
+            candidate_digest = binding[0]
+            candidate_source = binding[1]
+            candidate_tenant_key = (
+                binding[2] if len(binding) == 3 else None
+            )
             if hmac.compare_digest(digest, candidate_digest):
                 source = candidate_source
                 tenant_key = candidate_tenant_key
