@@ -1102,6 +1102,59 @@ class RouteAuthorizationTests(unittest.TestCase):
             self.assertEqual(allowed.status_code, 200)
             measure.assert_called_once_with(self.request_id)
 
+    def test_skill_evaluation_permissions(self):
+        analysis_event_id = uuid4()
+        evaluation_id = uuid4()
+        payload = {
+            "analysis_event_id": str(analysis_event_id),
+            "skill_name": "request_intake",
+            "verdict": "pass",
+            "notes": "Human reviewed persisted case evidence",
+        }
+        result = {
+            "evaluation_id": str(evaluation_id),
+            "request_id": str(self.request_id),
+            "skill_name": "request_intake",
+            "skill_version": "1.0.0",
+            "verdict": "pass",
+        }
+
+        with patch.object(
+            api,
+            "create_skill_evaluation",
+            return_value=result,
+        ) as create:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/skill-evaluations",
+                json=payload,
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            create.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/skill-evaluations",
+                json=payload,
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                create.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
+        with patch.object(
+            api,
+            "get_skill_evaluations",
+            return_value=[result],
+        ) as retrieve:
+            allowed = self.client.get(
+                f"/requests/{self.request_id}/skill-evaluations",
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            retrieve.assert_called_once_with(self.request_id)
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)
