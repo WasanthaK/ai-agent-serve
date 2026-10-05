@@ -702,6 +702,47 @@ class RouteAuthorizationTests(unittest.TestCase):
                 "operator:wasantha",
             )
 
+    def test_delivery_exception_write_requires_decide_permission(self):
+        exception_id = uuid4()
+        delivery_status_id = uuid4()
+        payload = {
+            "exception_id": str(exception_id),
+            "delivery_status_id": str(delivery_status_id),
+            "exception_kind": "delay",
+            "occurred_at": "2026-10-05T03:00:00Z",
+            "summary": "Provider reported a delay",
+            "expected_resolution_at": "2026-10-05T04:00:00Z",
+        }
+        result = {
+            "exception_id": str(exception_id),
+            "request_id": str(self.request_id),
+            "exception_kind": "delay",
+        }
+
+        with patch.object(
+            api,
+            "record_delivery_exception",
+            return_value=result,
+        ) as record:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/delivery-exceptions",
+                json=payload,
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            record.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/delivery-exceptions",
+                json=payload,
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                record.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)
