@@ -2,10 +2,19 @@
 
 ## Product direction
 
-The project is evolving into a controlled agent platform for service-delivery request management.
+The project is evolving into an independent domain-expert agent platform that integrates with the existing Quixo / Quotes transactional platform through versioned service contracts.
 
-The platform should help service organisations capture requests from multiple channels, collect missing information, identify risk, route work, prepare and evaluate quotations, coordinate delivery and preserve a complete operational history.
+### North star
 
+Build continuously learning domain-expert agents that understand real-world service requirements and operating conditions, identify uncertainty and risk, and transform that evidence into safe, predictable, commercially transactable proposals.
+
+The agent platform is responsible for expertise, reasoning, clarification, contextual intelligence and learning.
+
+The `WasanthaK/quotes` platform is the authoritative system of record for commercial and operational transactions: service requests, providers, RFQs, quotations, approvals, awards, Engagement/job execution, inspections, deposits, variations, messaging and related transactional state.
+
+The two systems intentionally remain separate so each can evolve, deploy and roll back independently.
+
+Canonical architecture: `docs/AGENT-QUOTES-BOUNDARY.md`.
 
 ## Design principles
 
@@ -603,61 +612,144 @@ Planned next after Phase 7:
 
 Production behaviour must never change solely because of unreviewed model output.
 
-## Phase 8 — Platform capabilities
+## Phase 8 — Platform capabilities and Quotes integration
 
-### Phase 8A — Multi-tenant isolation
+### Phase 8A — Multi-tenant access boundary
 
-Completed tenant identity foundation:
+Completed:
 
-- durable tenant identity and lifecycle implemented and CI-verified in PR #70
-- canonical tenant keys and explicit pending/active/suspended/closed states
-- append-only tenant lifecycle audit events
-- PostgreSQL create/read/status-transition proof
-- identity foundation does not itself claim tenant isolation
+- tenant identity foundation — PR #70
+- tenant-bound authentication context — PR #71
+- tenant-owned request ingress isolation — PR #72
+- downstream request-route isolation — PR #73
 
-Completed tenant-bound authentication context:
+These controls remain useful for protecting the agent platform itself.
 
-- optional canonical tenant binding for operator and inbound-channel credentials implemented and CI-verified in PR #71
-- authenticated tenant identity is carried in the request context
-- malformed tenant keys fail closed
-- legacy unbound credentials remain supported during migration
+They must not evolve into a second business tenancy model. Agent tenant identity will be mapped through explicit integration contracts to authoritative Quotes company/buyer context.
 
-Completed tenant-owned request ingress isolation:
+### Architecture correction — commercial-domain ownership
 
-- durable tenant ownership for agent_requests, inbound_messages and website idempotency reservations implemented and CI-verified in PR #72
-- tenant-bound website and trusted WhatsApp request creation/replay/read/reply paths fail closed
-- legacy unbound identities remain limited to legacy unowned rows
-- inbound linkage and external-message/idempotency identities are tenant-scoped
-- SendGrid remains explicitly legacy/unowned until it has a tenant-binding authority model
+Effective immediately:
 
-Current bounded work:
+- freeze new authoritative provider/RFQ/quote/award/delivery domain development in `ai-agent-serve`
+- do not tenant-own the local provider directory as a new production source of truth
+- treat completed Phase 5/6/7 commercial workflow modules as prototype/reference behaviour unless explicitly retained for intelligence or learning
+- use Quotes and ProviderService APIs for authoritative provider/request/quote/job state
+- retain agent-local persistence only for agent provenance, reasoning, evaluation, learning, correlation and resilience
+- no cross-database access
+- no shared ORM/entity packages between repositories
 
-- enforce one deterministic tenant ownership guard before every externally reachable request-owned operator route
-- preserve existing provider/RFQ/quote/delivery/closure/training business-state rules behind that guard
-- hide cross-tenant request existence with 404
-- fail closed when a bound tenant is missing or inactive
-- tenant-filter Training workspace list/detail reads through the joined request owner
-- keep non-request global metrics access on the existing permission-only boundary
+See `docs/AGENT-QUOTES-BOUNDARY.md`.
 
-Planned next:
+### Phase 8B — Commercial Requirement Package
 
-- bind provider directory and provider eligibility data to tenant ownership inside the existing Quotes application workflow
-- preserve the canonical request -> provider selection -> RFQ -> quote -> award -> delivery lifecycle; do not create a parallel provider/quote subsystem
-- ensure provider eligibility, RFQ handoff and quote records continue to resolve through the same request identity used by the main Quotes app
-- prove provider selection cannot cross tenant boundaries
-- remove remaining internal unscoped request assumptions where they could become externally reachable
-- complete Phase 8A only after provider and downstream tenant isolation proofs are green
+Define the independent, versioned output contract produced by expert agents.
 
-Remaining Phase 8 capabilities:
+Required areas:
 
-- Tenant-specific policies and skills
-- Role-based access control
-- Usage accounting
-- Regional data and retention controls
-- Public integration API
+- facts and customer objective
+- domain/subdomain
+- interpreted scope
+- work packages
+- materials/equipment concepts
+- labour concepts
+- known quantities
+- assumptions
+- exclusions
+- missing information
+- clarification questions
+- safety/compliance considerations
+- environmental/context constraints
+- dependencies
+- pricing readiness
+- inspection requirement
+- commercial risk
+- confidence
+- recommended next action
+- skill/model/evidence provenance
+
+The contract must distinguish fact, inference, assumption, estimate and unknown.
+
+No Quotes mutation is part of the first contract slice.
+
+### Phase 8C — Quotes anti-corruption adapter
+
+Build an explicit integration client between the agent and Quotes.
+
+Rules:
+
+- versioned HTTP/event contracts only
+- no direct database access
+- no dependency on Quotes table layout
+- service authentication and tenant/company/buyer context required
+- deterministic idempotency and correlation
+- bounded retries/timeouts
+- clear degraded-mode behavior
+
+Prefer existing Quotes seams first, including canonical internal request intake and ProviderService internal lookup APIs.
+
+### Phase 8D — Canonical identity/provenance linking
+
+Agent evidence may reference authoritative Quotes identifiers without owning their state.
+
+Examples:
+
+- Quotes ServiceRequest id/reference
+- Quotation id/version
+- RequestQuoteMatch/RFQ version evidence
+- Engagement id
+
+Persist those references only for provenance, learning and correlation.
+
+### Phase 8E — Outcome feedback into learning
+
+Consume factual transactional outcomes from Quotes and feed them into the existing human-controlled learning loop.
+
+Priority evidence:
+
+- provider correction to interpreted scope
+- clarification deltas
+- quote revisions
+- accepted/awarded proposal
+- execution exceptions
+- work completion
+- customer confirmation/satisfaction where permitted
+
+No transactional outcome automatically changes a skill. Promotion remains regression-gated and human-controlled.
+
+### Phase 8F — Context intelligence
+
+Add pluggable external-context providers selected by domain skill.
+
+Examples:
+
+- weather/severe-weather warnings
+- rain
+- wind/gusts
+- temperature/humidity
+- UV/heat
+- flood/fire
+- tides
+- daylight
+- traffic/access
+- air quality
+- seasonal conditions
+- future site sensors
+
+Context modifies recommendations and risk evidence only. Deterministic policy decides whether it is informational, review-required, rescheduling-recommended or safety-escalated.
+
+Initial proof: one outdoor-work skill using weather/environmental context.
+
+### Remaining platform capabilities
+
+- tenant-specific skill/policy overlays
+- role-based agent access control
+- usage accounting
+- regional data/retention controls
+- public integration API
 - MCP integration
-- Private deployment options
-- Optional local GPU inference
+- private deployment options
+- optional local GPU inference
 
 ## Initial skill catalogue
 
