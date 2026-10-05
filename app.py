@@ -200,6 +200,14 @@ from skill_evaluation import (
     create_skill_evaluation,
     get_skill_evaluations,
 )
+from skill_improvement import (
+    SkillImprovementConflictError,
+    SkillImprovementNotFoundError,
+    SkillImprovementStateError,
+    SkillImprovementValidationError,
+    create_skill_improvement_proposal,
+    get_skill_improvement_proposals,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -357,6 +365,13 @@ class SkillEvaluationInput(BaseModel):
     skill_name: str = Field(min_length=1, max_length=120)
     verdict: str = Field(min_length=1, max_length=20)
     notes: str = Field(min_length=1, max_length=4000)
+
+
+class SkillImprovementProposalInput(BaseModel):
+    evaluation_id: UUID
+    change_scope: str = Field(min_length=1, max_length=20)
+    proposed_change: str = Field(min_length=1, max_length=12000)
+    rationale: str = Field(min_length=1, max_length=4000)
 
 
 class CustomerReply(BaseModel):
@@ -676,6 +691,46 @@ def record_request_satisfaction_response(
     except (
         SatisfactionFollowUpStateError,
         SatisfactionFollowUpConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/skill-improvement-proposals",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_skill_improvement_proposals(request_id: UUID):
+    try:
+        return {
+            "request_id": str(request_id),
+            "proposals": get_skill_improvement_proposals(request_id),
+        }
+    except SkillImprovementValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/requests/{request_id}/skill-improvement-proposals")
+def create_request_skill_improvement_proposal(
+    request_id: UUID,
+    payload: SkillImprovementProposalInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return create_skill_improvement_proposal(
+            request_id,
+            payload.evaluation_id,
+            change_scope=payload.change_scope,
+            proposed_change=payload.proposed_change,
+            rationale=payload.rationale,
+            actor=operator.actor,
+        )
+    except SkillImprovementNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SkillImprovementValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        SkillImprovementStateError,
+        SkillImprovementConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 

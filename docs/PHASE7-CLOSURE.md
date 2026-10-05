@@ -221,3 +221,37 @@ The recorded evaluation explicitly states that it does **not**:
 - perform an external action.
 
 The PostgreSQL lifecycle proof evaluates the exact `request_intake` v1.0.0 provenance from a real persisted `request_created` event against the existing factual closure outcome, proves exact retry identity, rejects a conflicting verdict, and verifies no automated learning or promotion side effect.
+
+
+## Controlled instruction and policy improvement proposals
+
+A real-case skill evaluation may produce a human-authored improvement proposal only when the evaluation verdict is `needs_review` or `fail`.
+
+Proposal creation requires:
+
+- the exact persisted skill-evaluation ID;
+- the currently registered skill name to still exist;
+- the currently registered skill version to exactly match the evaluated historical version;
+- change scope `instructions` or `policy`;
+- explicit proposed-change text;
+- explicit rationale; and
+- operator `decide`.
+
+The service snapshots the current registered skill instructions into the proposal before any draft is stored. If the current registry version has already moved beyond the evaluated historical version, proposal creation fails closed rather than drafting against stale instructions.
+
+A `pass` evaluation cannot create an improvement proposal.
+
+Each evaluation may have at most one immutable proposal. Exact retries return the existing proposal; conflicting evidence fails closed.
+
+A proposal remains in `proposed` state only. This slice intentionally provides **no apply endpoint** and does not:
+
+- edit `agent_skills/definitions.py`;
+- mutate the runtime skill registry;
+- increment a skill version;
+- alter production prompts;
+- change deterministic policy;
+- promote a skill;
+- change production behavior; or
+- perform an external action.
+
+The PostgreSQL lifecycle proof verifies that a passing evaluation cannot create a proposal, a `needs_review` evaluation can create exactly one proposal for the matching current skill version, conflicting proposal evidence fails closed, and the proposal remains unapplied.

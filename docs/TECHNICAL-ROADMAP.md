@@ -520,21 +520,30 @@ Completed factual outcome measurement:
 - no provider score/rank is computed
 - no training signal, policy change, mutation, message, or external action is applied
 
+Completed real-case skill evaluation:
+
+- human-reviewed real-case skill evaluation implemented and CI-verified in PR #63
+- evaluations bind to exact persisted analysis-event provenance
+- only skill/version pairs proven in that event's `skill_versions` map are eligible
+- factual outcome evidence is snapshotted at evaluation time
+- verdicts are limited to `pass`, `needs_review`, and `fail`
+- exact retries are idempotent; conflicting evidence fails closed
+- no training signal, version change, policy change, promotion, or production behavior change is applied
+
 Current bounded work:
 
-- record human skill evaluation against a persisted real case
-- bind evaluation to the exact `request_created` or `request_reanalysed` analysis event
-- accept only a skill/version proven in that event's persisted `skill_versions` provenance
-- snapshot factual outcome evidence at evaluation time
-- support only human verdicts: `pass`, `needs_review`, or `fail`
-- require explicit evaluator notes and operator `decide`
-- permit one immutable evaluation per analysis-event/skill pair
-- make exact retries idempotent and conflicting verdict evidence fail closed
-- do not apply training signals, version changes, policy changes, skill promotion, or production behaviour changes
+- create human-authored instruction/policy improvement proposals from real-case skill evaluations
+- allow proposals only from `needs_review` or `fail` evaluations
+- require the currently registered skill version to still match the evaluated historical version
+- snapshot the current skill instructions before drafting the proposal
+- support change scope `instructions` or `policy`
+- require explicit proposed change, rationale and operator `decide`
+- permit one immutable proposal per evaluation
+- make exact retries idempotent and conflicting proposal evidence fail closed
+- do not apply the proposal, mutate the registry, change skill versions, change policy, or change production behavior
 
 Planned next:
 
-- Controlled improvement of instructions and policies
 - Regression tests before skill promotion
 
 Production behaviour must never change solely because of unreviewed model output.

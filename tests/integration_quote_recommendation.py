@@ -76,6 +76,12 @@ from skill_evaluation import (
     create_skill_evaluation,
     get_skill_evaluations,
 )
+from skill_improvement import (
+    SkillImprovementConflictError,
+    SkillImprovementStateError,
+    create_skill_improvement_proposal,
+    get_skill_improvement_proposals,
+)
 
 
 def ready_analysis():
@@ -130,7 +136,10 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             "CI Customer",
             "Need plumbing work",
             ready_analysis(),
-            skill_versions={"request_intake": "1.0.0"},
+            skill_versions={
+                "request_intake": "1.0.0",
+                "request_clarification": "1.0.0",
+            },
         )
         self.request_ids.append(request_id)
 
@@ -1076,7 +1085,10 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(
             request_created_event["details"]["skill_versions"],
-            {"request_intake": "1.0.0"},
+            {
+                "request_intake": "1.0.0",
+                "request_clarification": "1.0.0",
+            },
         )
 
         evaluation = create_skill_evaluation(
@@ -1165,6 +1177,130 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         )
         self.assertFalse(
             evaluation_events[0]["details"][
+                "production_behaviour_changed"
+            ]
+        )
+
+        with self.assertRaises(SkillImprovementStateError):
+            create_skill_improvement_proposal(
+                request_id,
+                UUID(evaluation["evaluation_id"]),
+                change_scope="instructions",
+                proposed_change=(
+                    "Clarify that intake summaries must avoid unsupported "
+                    "assumptions."
+                ),
+                rationale="Passing evaluations cannot directly create changes.",
+                actor="operator:ci",
+            )
+
+        clarification_evaluation = create_skill_evaluation(
+            request_id,
+            UUID(str(request_created_event["id"])),
+            "request_clarification",
+            verdict="needs_review",
+            notes=(
+                "Human evaluator found the clarification behavior should "
+                "better distinguish essential from optional details."
+            ),
+            actor="operator:ci",
+        )
+
+        proposal = create_skill_improvement_proposal(
+            request_id,
+            UUID(clarification_evaluation["evaluation_id"]),
+            change_scope="instructions",
+            proposed_change=(
+                "Make essential-information checks explicitly distinguish "
+                "blocking details from optional context before generating "
+                "follow-up questions."
+            ),
+            rationale=(
+                "The real-case evaluation identified a clarification gap, "
+                "but this draft must remain unapplied until separately "
+                "reviewed and regression-tested."
+            ),
+            actor="operator:ci",
+        )
+        proposal_retry = create_skill_improvement_proposal(
+            request_id,
+            UUID(clarification_evaluation["evaluation_id"]),
+            change_scope="instructions",
+            proposed_change=(
+                "Make essential-information checks explicitly distinguish "
+                "blocking details from optional context before generating "
+                "follow-up questions."
+            ),
+            rationale=(
+                "The real-case evaluation identified a clarification gap, "
+                "but this draft must remain unapplied until separately "
+                "reviewed and regression-tested."
+            ),
+            actor="operator:ci",
+        )
+
+        self.assertEqual(
+            proposal_retry["proposal_id"],
+            proposal["proposal_id"],
+        )
+        self.assertEqual(
+            proposal["skill_name"],
+            "request_clarification",
+        )
+        self.assertEqual(proposal["base_skill_version"], "1.0.0")
+        self.assertEqual(proposal["status"], "proposed")
+        self.assertFalse(proposal["applied"])
+        self.assertFalse(proposal["skill_version_changed"])
+        self.assertFalse(proposal["registry_changed"])
+        self.assertFalse(proposal["policy_change_applied"])
+        self.assertFalse(proposal["production_behaviour_changed"])
+
+        with self.assertRaises(SkillImprovementConflictError):
+            create_skill_improvement_proposal(
+                request_id,
+                UUID(clarification_evaluation["evaluation_id"]),
+                change_scope="policy",
+                proposed_change="Conflicting proposal.",
+                rationale="Different evidence.",
+                actor="operator:ci",
+            )
+
+        persisted_proposals = get_skill_improvement_proposals(
+            request_id
+        )
+        self.assertEqual(len(persisted_proposals), 1)
+        self.assertEqual(
+            persisted_proposals[0]["proposal_id"],
+            proposal["proposal_id"],
+        )
+
+        proposal_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"]
+            == "skill_improvement_proposal_created"
+        ]
+        self.assertEqual(len(proposal_events), 1)
+        self.assertEqual(
+            proposal_events[0]["details"]["skill_name"],
+            "request_clarification",
+        )
+        self.assertEqual(
+            proposal_events[0]["details"]["base_skill_version"],
+            "1.0.0",
+        )
+        self.assertFalse(proposal_events[0]["details"]["applied"])
+        self.assertFalse(
+            proposal_events[0]["details"]["skill_version_changed"]
+        )
+        self.assertFalse(
+            proposal_events[0]["details"]["registry_changed"]
+        )
+        self.assertFalse(
+            proposal_events[0]["details"]["policy_change_applied"]
+        )
+        self.assertFalse(
+            proposal_events[0]["details"][
                 "production_behaviour_changed"
             ]
         )
