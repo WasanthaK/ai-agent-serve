@@ -122,6 +122,15 @@ from delivery_notification import (
     get_prepared_delivery_notifications,
     prepare_delivery_notifications,
 )
+from delivery_appointment import (
+    DeliveryAppointmentConflictError,
+    DeliveryAppointmentNotFoundError,
+    DeliveryAppointmentStateError,
+    DeliveryAppointmentValidationError,
+    confirm_delivery_appointment,
+    get_delivery_appointment,
+    propose_delivery_appointment,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -206,6 +215,17 @@ class QuoteAwardInput(BaseModel):
 
 class DeliveryHandoffInput(BaseModel):
     award_id: UUID
+
+
+class DeliveryAppointmentProposalInput(BaseModel):
+    proposed_start_at: datetime
+    proposed_end_at: datetime
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+class DeliveryAppointmentConfirmationInput(BaseModel):
+    appointment_id: UUID
+    reason: str = Field(min_length=1, max_length=2000)
 
 
 class CustomerReply(BaseModel):
@@ -1052,6 +1072,73 @@ def prepare_request_delivery_notifications(
     except DeliveryNotificationValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except DeliveryNotificationStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/delivery-appointment",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_delivery_appointment(request_id: UUID):
+    try:
+        appointment = get_delivery_appointment(request_id)
+    except DeliveryAppointmentValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if appointment is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Delivery appointment not found",
+        )
+    return appointment
+
+
+@app.post("/requests/{request_id}/delivery-appointment/proposal")
+def propose_request_delivery_appointment(
+    request_id: UUID,
+    payload: DeliveryAppointmentProposalInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return propose_delivery_appointment(
+            request_id,
+            payload.proposed_start_at,
+            payload.proposed_end_at,
+            reason=payload.reason,
+            actor=operator.actor,
+        )
+    except DeliveryAppointmentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DeliveryAppointmentValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        DeliveryAppointmentStateError,
+        DeliveryAppointmentConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/requests/{request_id}/delivery-appointment/confirmation")
+def confirm_request_delivery_appointment(
+    request_id: UUID,
+    payload: DeliveryAppointmentConfirmationInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return confirm_delivery_appointment(
+            request_id,
+            payload.appointment_id,
+            reason=payload.reason,
+            actor=operator.actor,
+        )
+    except DeliveryAppointmentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DeliveryAppointmentValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        DeliveryAppointmentStateError,
+        DeliveryAppointmentConflictError,
+    ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
