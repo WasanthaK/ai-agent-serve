@@ -33,6 +33,20 @@ def build_quixo_whatsapp_router(
     router = APIRouter()
     authenticate_whatsapp = channel_dependency or require_inbound_channel("whatsapp")
 
+    def scoped_get_request(request_id, tenant_id):
+        if tenant_id is None:
+            return get_request(request_id)
+        return get_request(request_id, tenant_id=tenant_id)
+
+    def scoped_link(inbound_id, request_id, tenant_id):
+        if tenant_id is None:
+            return link_inbound_message_to_request(inbound_id, request_id)
+        return link_inbound_message_to_request(
+            inbound_id,
+            request_id,
+            tenant_id=tenant_id,
+        )
+
     @router.post("/webhook/whatsapp/inbound")
     def receive_quixo_whatsapp(
         envelope: WhatsAppInboundEnvelope,
@@ -43,6 +57,7 @@ def build_quixo_whatsapp_router(
             tenant_id = tenant_id_from_request(http_request)
         except TenantScopeError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
+
         normalized = normalize_whatsapp_message(
             authenticated_channel=authenticated_channel,
             envelope=envelope,
@@ -68,9 +83,9 @@ def build_quixo_whatsapp_router(
         linked_request_id = inbound_record["linked_request_id"]
 
         if linked_request_id is not None:
-            saved_request = get_request(
+            saved_request = scoped_get_request(
                 linked_request_id,
-                tenant_id=tenant_id,
+                tenant_id,
             )
             if saved_request is None:
                 raise HTTPException(
@@ -86,26 +101,9 @@ def build_quixo_whatsapp_router(
         # Reuse the durable inbound UUID as the internal request UUID. This makes
         # retries recover the same request without creating duplicate work.
         request_id = inbound_id
-        saved_request = get_request(
-            request_id,
-            tenant_id=tenant_id,
-        )
+        saved_request = scoped_get_request(request_id, tenant_id)
         if saved_request is not None:
-            if tenant_id is None:
-                if tenant_id is None:
-            link_inbound_message_to_request(inbound_id, request_id)
-        else:
-            link_inbound_message_to_request(
-                inbound_id,
-                request_id,
-                tenant_id=tenant_id,
-            )
-            else:
-                link_inbound_message_to_request(
-                    inbound_id,
-                    request_id,
-                    tenant_id=tenant_id,
-                )
+            scoped_link(inbound_id, request_id, tenant_id)
             return {
                 "status": "accepted",
                 "request_id": request_id,
@@ -128,48 +126,35 @@ def build_quixo_whatsapp_router(
         )
 
         try:
-            if tenant_id is None:
-                save_request(
-                    normalized.channel,
-                    customer_name,
-                    normalized.text,
-                    result,
-                    request_id=request_id,
-                    skill_versions=(
-                        skill_versions(result)
-                        if callable(skill_versions)
-                        else skill_versions
-                    ),
-                )
-            else:
-                save_request(
-                    normalized.channel,
-                    customer_name,
-                    normalized.text,
-                    result,
-                    request_id=request_id,
-                    skill_versions=(
-                        skill_versions(result)
-                        if callable(skill_versions)
-                        else skill_versions
-                    ),
-                    tenant_id=tenant_id,
-                )
+            kwargs = {
+                "request_id": request_id,
+                "skill_versions": (
+                    skill_versions(result)
+                    if callable(skill_versions)
+                    else skill_versions
+                ),
+            }
+            if tenant_id is not None:
+                kwargs["tenant_id"] = tenant_id
+            save_request(
+                normalized.channel,
+                customer_name,
+                normalized.text,
+                result,
+                **kwargs,
+            )
         except UniqueViolation:
             # Concurrent retries intentionally converge on the same UUID.
             pass
 
-        saved_request = get_request(
-            request_id,
-            tenant_id=tenant_id,
-        )
+        saved_request = scoped_get_request(request_id, tenant_id)
         if saved_request is None:
             raise HTTPException(
                 status_code=503,
                 detail="Inbound request is temporarily unavailable",
             )
 
-        link_inbound_message_to_request(inbound_id, request_id)
+        scoped_link(inbound_id, request_id, tenant_id)
 
         return {
             "status": "accepted",
