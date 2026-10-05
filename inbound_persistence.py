@@ -144,24 +144,35 @@ def save_inbound_message(message: NormalizedInboundMessage, *, tenant_id=None):
                     "message": inserted,
                 }
 
-            cur.execute(
-                """
-                SELECT *
-                FROM inbound_messages
-                WHERE channel = %s
-                  AND external_message_id = %s
-                  AND (
-                        (%s IS NULL AND tenant_id IS NULL)
-                        OR tenant_id = %s
-                  )
-                """,
-                (
-                    message.channel,
-                    message.external_message_id,
-                    tenant_id,
-                    tenant_id,
-                ),
-            )
+            if tenant_id is None:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM inbound_messages
+                    WHERE channel = %s
+                      AND external_message_id = %s
+                      AND tenant_id IS NULL
+                    """,
+                    (
+                        message.channel,
+                        message.external_message_id,
+                    ),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM inbound_messages
+                    WHERE channel = %s
+                      AND external_message_id = %s
+                      AND tenant_id = %s
+                    """,
+                    (
+                        message.channel,
+                        message.external_message_id,
+                        tenant_id,
+                    ),
+                )
             existing = cur.fetchone()
 
             if existing is None:
@@ -180,18 +191,26 @@ def save_inbound_message(message: NormalizedInboundMessage, *, tenant_id=None):
 def get_inbound_message(message_id, *, tenant_id=None):
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT *
-                FROM inbound_messages
-                WHERE id = %s
-                  AND (
-                        (%s IS NULL AND tenant_id IS NULL)
-                        OR tenant_id = %s
-                  )
-                """,
-                (message_id, tenant_id, tenant_id),
-            )
+            if tenant_id is None:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM inbound_messages
+                    WHERE id = %s
+                      AND tenant_id IS NULL
+                    """,
+                    (message_id,),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM inbound_messages
+                    WHERE id = %s
+                      AND tenant_id = %s
+                    """,
+                    (message_id, tenant_id),
+                )
             return cur.fetchone()
 
 
@@ -200,19 +219,28 @@ def link_inbound_message_to_request(message_id, request_id, *, tenant_id=None):
 
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT *
-                FROM inbound_messages
-                WHERE id = %s
-                  AND (
-                        (%s IS NULL AND tenant_id IS NULL)
-                        OR tenant_id = %s
-                  )
-                FOR UPDATE
-                """,
-                (message_id, tenant_id, tenant_id),
-            )
+            if tenant_id is None:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM inbound_messages
+                    WHERE id = %s
+                      AND tenant_id IS NULL
+                    FOR UPDATE
+                    """,
+                    (message_id,),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM inbound_messages
+                    WHERE id = %s
+                      AND tenant_id = %s
+                    FOR UPDATE
+                    """,
+                    (message_id, tenant_id),
+                )
             existing = cur.fetchone()
             if existing is None:
                 return None
