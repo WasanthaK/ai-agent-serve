@@ -37,7 +37,7 @@ def hash_webhook_payload(source, customer_name, message):
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def reserve_webhook_delivery(source, key_hash, payload_hash):
+def reserve_webhook_delivery(source, key_hash, payload_hash, *, tenant_id=None):
     for _ in range(3):
         request_id = uuid.uuid4()
 
@@ -50,13 +50,14 @@ def reserve_webhook_delivery(source, key_hash, payload_hash):
                         idempotency_key_hash,
                         payload_hash,
                         request_id,
-                        state
+                        state,
+                        tenant_id
                     )
-                    VALUES (%s, %s, %s, %s, 'processing')
-                    ON CONFLICT (source, idempotency_key_hash) DO NOTHING
+                    VALUES (%s, %s, %s, %s, 'processing', %s)
+                    ON CONFLICT DO NOTHING
                     RETURNING request_id, payload_hash, state
                     """,
-                    (source, key_hash, payload_hash, request_id),
+                    (source, key_hash, payload_hash, request_id, tenant_id),
                 )
                 inserted = cur.fetchone()
                 if inserted is not None:
@@ -71,8 +72,12 @@ def reserve_webhook_delivery(source, key_hash, payload_hash):
                     FROM webhook_idempotency
                     WHERE source = %s
                       AND idempotency_key_hash = %s
+                      AND (
+                          (%s IS NULL AND tenant_id IS NULL)
+                          OR tenant_id = %s
+                      )
                     """,
-                    (source, key_hash),
+                    (source, key_hash, tenant_id, tenant_id),
                 )
                 existing = cur.fetchone()
 
@@ -95,7 +100,7 @@ def reserve_webhook_delivery(source, key_hash, payload_hash):
     raise RuntimeError("Idempotency reservation changed repeatedly")
 
 
-def complete_webhook_delivery(source, key_hash, request_id):
+def complete_webhook_delivery(source, key_hash, request_id, *, tenant_id=None):
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -107,14 +112,18 @@ def complete_webhook_delivery(source, key_hash, request_id):
                   AND idempotency_key_hash = %s
                   AND request_id = %s
                   AND state = 'processing'
+                  AND (
+                      (%s IS NULL AND tenant_id IS NULL)
+                      OR tenant_id = %s
+                  )
                 """,
-                (source, key_hash, request_id),
+                (source, key_hash, request_id, tenant_id, tenant_id),
             )
             if cur.rowcount != 1:
                 raise RuntimeError("Idempotency reservation could not be completed")
 
 
-def release_webhook_delivery(source, key_hash, request_id):
+def release_webhook_delivery(source, key_hash, request_id, *, tenant_id=None):
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -124,8 +133,12 @@ def release_webhook_delivery(source, key_hash, request_id):
                   AND idempotency_key_hash = %s
                   AND request_id = %s
                   AND state = 'processing'
+                  AND (
+                      (%s IS NULL AND tenant_id IS NULL)
+                      OR tenant_id = %s
+                  )
                 """,
-                (source, key_hash, request_id),
+                (source, key_hash, request_id, tenant_id, tenant_id),
             )
 
 
