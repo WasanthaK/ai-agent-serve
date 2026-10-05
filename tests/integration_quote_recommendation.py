@@ -55,6 +55,7 @@ from human_intervention import (
     create_human_intervention,
     get_human_interventions,
 )
+from delivery_timeline import get_delivery_timeline
 
 
 def ready_analysis():
@@ -741,6 +742,45 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         self.assertFalse(
             completion_events[0]["details"]["notification_sent"]
         )
+
+        timeline = get_delivery_timeline(request_id)
+        timeline_types = [
+            item["event_type"]
+            for item in timeline["timeline"]
+        ]
+        self.assertEqual(
+            timeline["event_count"],
+            len(timeline["timeline"]),
+        )
+        self.assertEqual(
+            [item["sequence"] for item in timeline["timeline"]],
+            list(range(1, timeline["event_count"] + 1)),
+        )
+        self.assertEqual(timeline["latest_stage"], "completion")
+        self.assertTrue(timeline["delivery_completed"])
+        self.assertTrue(timeline["has_exceptions"])
+        self.assertTrue(timeline["has_interventions"])
+        self.assertEqual(
+            timeline_types,
+            [
+                "delivery_handoff_activated",
+                "delivery_notifications_prepared",
+                "delivery_appointment_proposed",
+                "delivery_appointment_confirmed",
+                "delivery_status_scheduled",
+                "delivery_status_in_progress",
+                "delivery_exception_recorded",
+                "delivery_exception_recorded",
+                "human_intervention_created",
+                "human_intervention_acknowledged",
+                "delivery_status_completed",
+            ],
+        )
+        for item in timeline["timeline"]:
+            self.assertIsNotNone(item["event_id"])
+            self.assertIsNotNone(item["actor"])
+            self.assertIsNotNone(item["created_at"])
+            self.assertIn("details", item)
 
 
 if __name__ == "__main__":
