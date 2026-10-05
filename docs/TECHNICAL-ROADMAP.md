@@ -641,7 +641,9 @@ Current bounded work:
 
 Planned next:
 
-- bind provider directory and provider eligibility data to tenant ownership
+- bind provider directory and provider eligibility data to tenant ownership inside the existing Quotes application workflow
+- preserve the canonical request -> provider selection -> RFQ -> quote -> award -> delivery lifecycle; do not create a parallel provider/quote subsystem
+- ensure provider eligibility, RFQ handoff and quote records continue to resolve through the same request identity used by the main Quotes app
 - prove provider selection cannot cross tenant boundaries
 - remove remaining internal unscoped request assumptions where they could become externally reachable
 - complete Phase 8A only after provider and downstream tenant isolation proofs are green
