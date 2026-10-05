@@ -550,19 +550,29 @@ Completed regression gate before promotion:
 - exact retries are idempotent and conflicting evidence fails closed
 - no apply endpoint, registry/version mutation, promotion, or production behavior change exists
 
+Completed training workspace access layer:
+
+- read-only training workspace projection implemented and CI-verified in PR #66
+- evaluation, proposal and regression evidence are consolidated into one training case
+- deterministic stages expose accepted, proposal-needed, regression-needed, regression-failed and promotion-review-ready cases
+- only backend-supported actions are exposed
+- access requires operator `read`
+- no model-judge, promotion, registry, prompt, policy, or production authority was introduced
+
 Current bounded work:
 
-- provide a read-only training workspace projection for end-user training workflows
-- consolidate evaluation, proposal and regression evidence into one training case
-- expose deterministic stages: accepted, needs improvement proposal, needs regression test, regression failed, ready for promotion review
-- expose only currently supported actions; failed regression and promotion states must be visibly blocked until those backend capabilities exist
-- require operator `read`
-- do not create new mutation, model-judge, promotion, registry, prompt, policy, or production authority
+- allow a failed regression candidate to be revised without mutating the original proposal or failed evidence
+- create immutable numbered revisions linked to the exact failed regression they supersede
+- permit regression evidence against the latest revision only
+- require current skill version and instructions to still match the original proposal base snapshot
+- make exact revision retries idempotent and conflicting revisions fail closed
+- expose revision creation only from the regression-failed training stage
+- preserve the complete proposal -> failed regression -> revision -> retest audit chain
+- do not apply revisions, mutate the registry, change skill versions, promote skills, or change production behavior
 
 Planned next:
 
 - End-user Training / Skill Improvement UI
-- Revision path after failed regression
 - Controlled skill promotion after passing regression evidence
 
 Production behaviour must never change solely because of unreviewed model output.
