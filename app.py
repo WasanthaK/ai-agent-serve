@@ -37,6 +37,7 @@ from inbound_persistence import (
     link_inbound_message_to_request,
     save_inbound_message,
 )
+from tenant_scope import TenantScopeError, tenant_id_from_request, resolve_active_tenant_id
 from observability import (
     StructuredRequestLoggingMiddleware,
     correlation_exception_handler,
@@ -522,6 +523,32 @@ def _stored_analysis(saved_request):
     }
 
 
+def _tenant_scoped_get_request(request_id, tenant_id):
+    return get_request(request_id, tenant_id=tenant_id)
+
+
+def _tenant_scoped_save_inbound(message, tenant_id):
+    if tenant_id is None:
+        return save_inbound_message(message)
+    return save_inbound_message(message, tenant_id=tenant_id)
+
+
+def _tenant_scoped_link_inbound(message_id, request_id, tenant_id):
+    if tenant_id is None:
+        return link_inbound_message_to_request(message_id, request_id)
+    return link_inbound_message_to_request(
+        message_id,
+        request_id,
+        tenant_id=tenant_id,
+    )
+
+
+def _tenant_scoped_save_request(*args, tenant_id, **kwargs):
+    if tenant_id is None:
+        return save_request(*args, **kwargs)
+    return save_request(*args, tenant_id=tenant_id, **kwargs)
+
+
 def _quote_webhook_response(saved_request):
     return {
         "request_id": saved_request["id"],
@@ -601,6 +628,11 @@ def quote_webhook(
         audit_denial(http_request, "source_mismatch", f"channel:{source}")
         raise HTTPException(status_code=403, detail="Source is not authorized")
 
+    try:
+        tenant_id = tenant_id_from_request(http_request)
+    except TenantScopeError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
     key_hash = None
     reserved_request_id = None
 
@@ -629,6 +661,7 @@ def quote_webhook(
             inbound_message.channel,
             key_hash,
             payload_hash,
+            tenant_id=tenant_id,
         )
         reserved_request_id = reservation["request_id"]
 
@@ -648,27 +681,37 @@ def quote_webhook(
             )
 
         if reservation["action"] == "completed":
-            saved_request = get_request(reserved_request_id)
+            saved_request = _tenant_scoped_get_request(
+                reserved_request_id,
+                tenant_id,
+            )
             if saved_request is None:
                 raise HTTPException(
                     status_code=503,
                     detail="Stored idempotent request is temporarily unavailable",
                 )
             try:
-                persisted = save_inbound_message(inbound_message)
+                persisted = _tenant_scoped_save_inbound(
+                    inbound_message,
+                    tenant_id,
+                )
             except InboundMessageConflictError:
                 raise HTTPException(
                     status_code=409,
                     detail="Conflicting website message identity",
                 ) from None
-            link_inbound_message_to_request(
+            _tenant_scoped_link_inbound(
                 persisted["message"]["id"],
                 reserved_request_id,
+                tenant_id,
             )
             return _quote_webhook_response(saved_request)
 
     try:
-        persisted = save_inbound_message(inbound_message)
+        persisted = _tenant_scoped_save_inbound(
+            inbound_message,
+            tenant_id,
+        )
     except InboundMessageConflictError:
         raise HTTPException(
             status_code=409,
@@ -687,17 +730,19 @@ def quote_webhook(
                 inbound_message.channel,
                 key_hash,
                 reserved_request_id,
+                tenant_id=tenant_id,
             )
         raise
 
     try:
-        request_id = save_request(
+        request_id = _tenant_scoped_save_request(
             inbound_message.channel,
             request.customer_name,
             inbound_message.text,
             result,
             request_id=reserved_request_id,
             skill_versions=analysis_skill_versions_for_result(result),
+            tenant_id=tenant_id,
         )
     except Exception:
         if key_hash is not None:
@@ -705,21 +750,24 @@ def quote_webhook(
                 inbound_message.channel,
                 key_hash,
                 reserved_request_id,
+                tenant_id=tenant_id,
             )
         raise
 
-    saved_request = get_request(request_id)
+    saved_request = _tenant_scoped_get_request(request_id, tenant_id)
 
     if key_hash is not None:
         complete_webhook_delivery(
             inbound_message.channel,
             key_hash,
             request_id,
+            tenant_id=tenant_id,
         )
 
-    link_inbound_message_to_request(
+    _tenant_scoped_link_inbound(
         persisted["message"]["id"],
         request_id,
+        tenant_id,
     )
 
     return {
@@ -732,8 +780,12 @@ def quote_webhook(
 
 
 @app.get("/requests/{request_id}", dependencies=[Depends(require_operator_permission("read"))])
-def retrieve_request(request_id: UUID):
-    request = get_request(request_id)
+def retrieve_request(request_id: UUID, http_request: Request):
+    try:
+        tenant_id = tenant_id_from_request(http_request)
+    except TenantScopeError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    request = _tenant_scoped_get_request(request_id, tenant_id)
 
     if request is None:
         raise HTTPException(
@@ -1197,7 +1249,11 @@ def receive_customer_reply(
     reply: CustomerReply,
     operator: OperatorPrincipal = Depends(require_operator_permission("reply")),
 ):
-    request = get_request(request_id)
+    try:
+        tenant_id = resolve_active_tenant_id(operator.tenant_key)
+    except TenantScopeError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    request = _tenant_scoped_get_request(request_id, tenant_id)
     if request is None:
         raise HTTPException(status_code=404, detail="Request not found")
 
@@ -1215,7 +1271,11 @@ def receive_channel_reply(
     http_request: Request,
     source: str = Depends(require_inbound_key),
 ):
-    request = get_request(request_id)
+    try:
+        tenant_id = tenant_id_from_request(http_request)
+    except TenantScopeError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    request = _tenant_scoped_get_request(request_id, tenant_id)
 
     if request is None or request["source"] != source:
         audit_denial(http_request, "channel_request_denied", f"channel:{source}")
