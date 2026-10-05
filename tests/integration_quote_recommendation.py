@@ -71,6 +71,11 @@ from closure_escalation import (
     get_closure_escalations,
 )
 from outcome_measurement import get_outcome_measurement
+from skill_evaluation import (
+    SkillEvaluationConflictError,
+    create_skill_evaluation,
+    get_skill_evaluations,
+)
 
 
 def ready_analysis():
@@ -1063,6 +1068,106 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         self.assertFalse(outcome["policy_change_applied"])
         self.assertFalse(outcome["training_signal_applied"])
         self.assertFalse(outcome["external_action_performed"])
+
+        request_created_event = next(
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"] == "request_created"
+        )
+        self.assertEqual(
+            request_created_event["details"]["skill_versions"],
+            {"request_intake": "1.0.0"},
+        )
+
+        evaluation = create_skill_evaluation(
+            request_id,
+            UUID(str(request_created_event["id"])),
+            "request_intake",
+            verdict="pass",
+            notes=(
+                "Human evaluator verified the recorded intake skill "
+                "against the persisted real-case evidence."
+            ),
+            actor="operator:ci",
+        )
+        evaluation_retry = create_skill_evaluation(
+            request_id,
+            UUID(str(request_created_event["id"])),
+            "request_intake",
+            verdict="pass",
+            notes=(
+                "Human evaluator verified the recorded intake skill "
+                "against the persisted real-case evidence."
+            ),
+            actor="operator:ci",
+        )
+
+        self.assertEqual(
+            evaluation_retry["evaluation_id"],
+            evaluation["evaluation_id"],
+        )
+        self.assertEqual(evaluation["skill_name"], "request_intake")
+        self.assertEqual(evaluation["skill_version"], "1.0.0")
+        self.assertEqual(evaluation["verdict"], "pass")
+        self.assertEqual(
+            evaluation["outcome_snapshot"]["satisfaction_rating"],
+            1,
+        )
+        self.assertFalse(evaluation["training_signal_applied"])
+        self.assertFalse(evaluation["skill_version_changed"])
+        self.assertFalse(evaluation["policy_change_applied"])
+        self.assertFalse(evaluation["promotion_applied"])
+        self.assertFalse(evaluation["production_behaviour_changed"])
+
+        with self.assertRaises(SkillEvaluationConflictError):
+            create_skill_evaluation(
+                request_id,
+                UUID(str(request_created_event["id"])),
+                "request_intake",
+                verdict="fail",
+                notes="Conflicting human verdict.",
+                actor="operator:ci",
+            )
+
+        persisted_evaluations = get_skill_evaluations(request_id)
+        self.assertEqual(len(persisted_evaluations), 1)
+        self.assertEqual(
+            persisted_evaluations[0]["evaluation_id"],
+            evaluation["evaluation_id"],
+        )
+
+        evaluation_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"]
+            == "skill_real_case_evaluation_recorded"
+        ]
+        self.assertEqual(len(evaluation_events), 1)
+        self.assertEqual(
+            evaluation_events[0]["details"]["skill_name"],
+            "request_intake",
+        )
+        self.assertEqual(
+            evaluation_events[0]["details"]["skill_version"],
+            "1.0.0",
+        )
+        self.assertFalse(
+            evaluation_events[0]["details"]["training_signal_applied"]
+        )
+        self.assertFalse(
+            evaluation_events[0]["details"]["skill_version_changed"]
+        )
+        self.assertFalse(
+            evaluation_events[0]["details"]["policy_change_applied"]
+        )
+        self.assertFalse(
+            evaluation_events[0]["details"]["promotion_applied"]
+        )
+        self.assertFalse(
+            evaluation_events[0]["details"][
+                "production_behaviour_changed"
+            ]
+        )
 
 
 if __name__ == "__main__":
