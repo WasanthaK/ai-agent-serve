@@ -46,6 +46,11 @@ class TrainingWorkspaceTests(unittest.TestCase):
             "candidate_failures": None,
             "regression_verdict": None,
             "regression_created_at": None,
+            "promotion_id": None,
+            "promoted_skill_version": None,
+            "promotion_reason": None,
+            "promoted_by": None,
+            "promotion_created_at": None,
             "training_stage": None,
         }
         if proposal:
@@ -89,19 +94,18 @@ class TrainingWorkspaceTests(unittest.TestCase):
         )
         self.assertEqual(
             workspace._supported_actions("ready_for_promotion_review"),
-            [],
+            ["promote_skill"],
         )
 
     def test_blocked_states_are_explicit(self):
         self.assertIsNone(
             workspace._blocked_reason("regression_failed")
         )
-        self.assertEqual(
-            workspace._blocked_reason("ready_for_promotion_review"),
-            "promotion_not_supported",
+        self.assertIsNone(
+            workspace._blocked_reason("ready_for_promotion_review")
         )
 
-    def test_result_exposes_no_promotion_authority(self):
+    def test_result_exposes_human_promotion_action_only_after_pass(self):
         row = self.row(
             verdict="needs_review",
             proposal=True,
@@ -115,13 +119,13 @@ class TrainingWorkspaceTests(unittest.TestCase):
             result["training_stage"],
             "ready_for_promotion_review",
         )
-        self.assertFalse(result["promotion_supported"])
+        self.assertTrue(result["promotion_supported"])
         self.assertFalse(result["production_behaviour_changed"])
-        self.assertEqual(result["supported_actions"], [])
         self.assertEqual(
-            result["blocked_reason"],
-            "promotion_not_supported",
+            result["supported_actions"],
+            ["promote_skill"],
         )
+        self.assertIsNone(result["blocked_reason"])
 
     def test_rejects_unknown_stage_and_invalid_limit(self):
         with self.assertRaises(

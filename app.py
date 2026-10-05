@@ -224,6 +224,14 @@ from skill_revision import (
     create_skill_improvement_revision,
     get_skill_improvement_revisions,
 )
+from skill_promotion import (
+    SkillPromotionConflictError,
+    SkillPromotionNotFoundError,
+    SkillPromotionStateError,
+    SkillPromotionValidationError,
+    get_skill_promotions,
+    promote_skill,
+)
 from training_workspace import (
     TrainingWorkspaceNotFoundError,
     TrainingWorkspaceValidationError,
@@ -419,6 +427,11 @@ class SkillImprovementRevisionInput(BaseModel):
     rationale: str = Field(min_length=1, max_length=4000)
 
 
+class SkillPromotionInput(BaseModel):
+    regression_test_id: UUID
+    reason: str = Field(min_length=1, max_length=4000)
+
+
 class CustomerReply(BaseModel):
     message: str = Field(
         min_length=1,
@@ -431,17 +444,31 @@ class CustomerReply(BaseModel):
     )
 
 
-QUOTE_ANALYSIS_SCHEMA = skill_registry.build_json_schema(
-    DEFAULT_ANALYSIS_SKILLS
-)
+class AnalysisResult(dict):
+    """Structured analysis plus the exact skill versions used to produce it."""
 
-QUOTE_ANALYSIS_INSTRUCTIONS = skill_registry.build_instructions(
-    DEFAULT_ANALYSIS_SKILLS
-) + "\n\n" + service_catalog.build_analysis_instructions()
+    def __init__(self, value, *, skill_versions):
+        super().__init__(value)
+        self.skill_versions = dict(skill_versions)
 
-ANALYSIS_SKILL_VERSIONS = skill_registry.versions(
-    DEFAULT_ANALYSIS_SKILLS
-)
+
+def analysis_skill_versions_for_result(result):
+    versions = getattr(result, "skill_versions", None)
+    if versions is not None:
+        return dict(versions)
+    return skill_registry.versions(DEFAULT_ANALYSIS_SKILLS)
+
+
+def _analysis_contract_snapshot():
+    contract = skill_registry.build_contract(
+        DEFAULT_ANALYSIS_SKILLS
+    )
+    contract["instructions"] = (
+        contract["instructions"]
+        + "\n\n"
+        + service_catalog.build_analysis_instructions()
+    )
+    return contract
 
 
 def analyze_quote_request(
@@ -450,10 +477,11 @@ def analyze_quote_request(
     customer_name=None,
 ):
     try:
+        contract = _analysis_contract_snapshot()
         response = operational_metrics.measure_model_call(
             lambda: client.responses.create(
                 model="gpt-5.6",
-                instructions=QUOTE_ANALYSIS_INSTRUCTIONS,
+                instructions=contract["instructions"],
                 input=f"""
 Source: {source}
 Customer: {customer_name or "Unknown"}
@@ -465,12 +493,15 @@ Message or conversation:
                         "type": "json_schema",
                         "name": "quote_request",
                         "strict": True,
-                        "schema": QUOTE_ANALYSIS_SCHEMA,
+                        "schema": contract["schema"],
                     }
                 },
             )
         )
-        return json.loads(response.output_text)
+        return AnalysisResult(
+            json.loads(response.output_text),
+            skill_versions=contract["versions"],
+        )
     except Exception:
         raise HTTPException(
             status_code=502,
@@ -666,7 +697,7 @@ def quote_webhook(
             inbound_message.text,
             result,
             request_id=reserved_request_id,
-            skill_versions=ANALYSIS_SKILL_VERSIONS,
+            skill_versions=analysis_skill_versions_for_result(result),
         )
     except Exception:
         if key_hash is not None:
@@ -761,7 +792,7 @@ def retrieve_training_cases(
                 skill_name=skill_name,
                 limit=limit,
             ),
-            "promotion_supported": False,
+            "promotion_supported": True,
         }
     except TrainingWorkspaceValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -778,6 +809,44 @@ def retrieve_training_case(evaluation_id: UUID):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except TrainingWorkspaceValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/skill-promotions",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_skill_promotions(request_id: UUID):
+    try:
+        return {
+            "request_id": str(request_id),
+            "promotions": get_skill_promotions(request_id),
+        }
+    except SkillPromotionValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/requests/{request_id}/skill-promotions")
+def create_request_skill_promotion(
+    request_id: UUID,
+    payload: SkillPromotionInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return promote_skill(
+            request_id,
+            payload.regression_test_id,
+            reason=payload.reason,
+            actor=operator.actor,
+        )
+    except SkillPromotionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SkillPromotionValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        SkillPromotionStateError,
+        SkillPromotionConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.get(
@@ -1219,7 +1288,7 @@ def _process_customer_reply(request_id, reply, request, channel, actor):
     updated_request = update_request_analysis(
         request_id=request_id,
         result=result,
-        skill_versions=ANALYSIS_SKILL_VERSIONS,
+        skill_versions=analysis_skill_versions_for_result(result),
     )
 
     return {

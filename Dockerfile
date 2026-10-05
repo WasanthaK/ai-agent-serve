@@ -6,22 +6,9 @@ COPY requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py .
-COPY runtime.py .
-COPY db.py .
-COPY tools.py .
-COPY security.py .
-COPY observability.py .
-COPY operational_metrics.py .
-COPY request_controls.py .
-COPY idempotency.py .
-COPY recover_idempotency.py .
-COPY inbound.py .
-COPY inbound_adapters.py .
-COPY inbound_persistence.py .
-COPY sendgrid_inbound.py .
-COPY sendgrid_routes.py .
-COPY quixo_whatsapp_routes.py .
+# Keep the runtime image aligned with the repository's root Python modules.
+# Earlier explicit COPY entries silently excluded later Phase 5-7 modules.
+COPY *.py ./
 COPY agent_skills ./agent_skills
 
 EXPOSE 8000

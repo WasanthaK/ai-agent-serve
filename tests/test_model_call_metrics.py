@@ -88,6 +88,10 @@ class ModelCallMetricsTests(unittest.TestCase):
             result = api.analyze_quote_request("Replace a tap")
 
         self.assertEqual(result, parsed)
+        self.assertEqual(
+            api.analysis_skill_versions_for_result(result),
+            api.skill_registry.versions(api.DEFAULT_ANALYSIS_SKILLS),
+        )
         measure.assert_called_once()
         create.assert_called_once()
 

@@ -141,7 +141,11 @@ def build_sendgrid_router(
                 normalized.text,
                 result,
                 request_id=request_id,
-                skill_versions=skill_versions,
+                skill_versions=(
+                    skill_versions(result)
+                    if callable(skill_versions)
+                    else skill_versions
+                ),
             )
         except UniqueViolation:
             # Concurrent retry: both deliveries intentionally use the same
