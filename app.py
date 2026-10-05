@@ -158,6 +158,10 @@ from human_intervention import (
     create_human_intervention,
     get_human_interventions,
 )
+from delivery_timeline import (
+    DeliveryTimelineValidationError,
+    get_delivery_timeline,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -582,6 +586,24 @@ def retrieve_request(request_id: UUID):
         )
 
     return request
+
+
+@app.get(
+    "/requests/{request_id}/delivery-timeline",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_delivery_timeline(request_id: UUID):
+    request = get_request(request_id)
+    if request is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Request not found",
+        )
+
+    try:
+        return get_delivery_timeline(request_id)
+    except DeliveryTimelineValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get("/requests/{request_id}/events", dependencies=[Depends(require_operator_permission("read"))])
