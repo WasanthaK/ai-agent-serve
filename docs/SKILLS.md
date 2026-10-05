@@ -6,7 +6,7 @@ Skills package reusable domain expertise, service-delivery knowledge, schemas an
 
 The long-term goal is not generic classification. Each selectable domain should evolve toward an expert skill pack capable of turning imperfect real-world requirements into a commercially useful scope while representing uncertainty truthfully.
 
-A skill describes how the agent should reason. A tool performs an operation. Workflow state and deterministic policy determine whether either capability may be used. Transactional authority remains in the external Quotes platform.
+A skill describes how the agent should reason. A tool performs an operation. Workflow state and deterministic policy determine whether either capability may be used. Transactional authority remains in the owning Quixo product (for example SendQuote, RequestQuote or Marketplace), never in a skill.
 
 ## Skill contract
 
@@ -156,17 +156,48 @@ A domain skill may declare external context it knows how to interpret, for examp
 
 The skill interprets context. It does not gain authority to reschedule, commit price, contact a customer/provider or alter Quotes transactional state.
 
-## Commercial Requirement Package
+## Expert output contracts
 
-The target primary output of expert skills is the versioned Commercial Requirement Package defined in `docs/AGENT-QUOTES-BOUNDARY.md`.
+The target architecture defines two related contracts in
+`docs/AGENT-QUOTES-BOUNDARY.md`.
 
-This contract must preserve the distinction between:
+### Requirement Intelligence Package
+
+Customer/request-side, price-neutral output used by RequestQuote, Marketplace and
+connectors during or after intake.
+
+It must not invent provider prices.
+
+### Commercial Proposal Package
+
+Provider-side expert output used by SendQuote/provider workflows. It may contain
+clearly-labelled pricing suggestions or estimates only where policy permits, while
+the provider/human and SendQuote remain authoritative for final commercial values,
+totals, approval and sending.
+
+Both contracts preserve the distinction between:
 
 - supplied facts
+- authoritative platform facts
 - expert inference
 - assumptions
 - estimates
 - unknown/missing information
 - safety-critical uncertainty
 
-A Quotes adapter translates approved package data into supported Quotes API contracts. Skills must never depend directly on Quotes database models.
+Product adapters translate approved package data into supported Quixo API
+contracts. Skills must never depend directly on another product's database models.
+
+## Product consumers
+
+A domain skill can be consumed independently by:
+
+- RequestQuote
+- Marketplace
+- SendQuote
+- selected connectors
+- future separate products such as Task Scheduler/Workforce
+
+The same domain expertise may be used at different stages with different authority
+and output constraints. For example, RequestQuote remains price-neutral while
+SendQuote may request provider-side proposal intelligence.
