@@ -1325,7 +1325,7 @@ class RouteAuthorizationTests(unittest.TestCase):
                 skill_name=None,
                 limit=25,
             )
-            self.assertFalse(allowed.json()["promotion_supported"])
+            self.assertTrue(allowed.json()["promotion_supported"])
 
         with patch.object(
             api,
