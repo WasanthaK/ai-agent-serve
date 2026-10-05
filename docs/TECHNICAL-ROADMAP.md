@@ -364,15 +364,24 @@ Completed delivery notification preparation:
 - repeated preparation is idempotent
 - no email, WhatsApp, SMS or other external message is sent
 
+Completed delivery appointment state:
+
+- one human-controlled appointment proposal per actioned request implemented and CI-verified in PR #52
+- proposal requires a timezone-aware future window and explicit reason
+- explicit human confirmation is required before delivery can be scheduled
+- exact proposal and confirmation retries are idempotent; conflicting evidence fails closed
+- writes require operator `decide`; reads require `read`
+- no external calendar booking or notification send is performed
+
 Current bounded work:
 
-- add one human-controlled delivery appointment proposal per actioned request
-- require a timezone-aware future start/end window and explicit proposal reason
-- allow explicit human confirmation of the existing proposal
-- make exact proposal and confirmation retries idempotent; conflicting evidence fails closed
-- require operator `decide` for proposal/confirmation and `read` for retrieval
-- write proposal and confirmation audit events transactionally
-- do not create external calendar bookings or send notifications in this slice
+- create one durable delivery-execution status record from a confirmed appointment
+- initialize the record in `scheduled` state with explicit human reason
+- permit one human-controlled transition from `scheduled` to `in_progress`
+- make exact schedule/start retries idempotent; conflicting evidence fails closed
+- require operator `decide` for state changes and `read` for retrieval
+- write status audit events transactionally
+- do not record completion, exceptions, or send notifications in this slice
 
 Routing roadmap:
 
@@ -411,16 +420,15 @@ Completed:
 
 - Post-award internal delivery handoff and request transition to `actioned` — PR #50
 - Durable customer/provider notification preparation with unresolved destinations — PR #51
+- Human-controlled appointment proposal and confirmation state management — PR #52
 
 Current bounded work:
 
-- Human-controlled appointment proposal and confirmation state management
+- Delivery execution status tracking: `scheduled` → `in_progress`
 
 Planned next:
 
 - Notification destination resolution and delivery authorization
-- Status tracking
-- Status tracking
 - Delay and exception handling
 - Human intervention queues
 - Service completion confirmation

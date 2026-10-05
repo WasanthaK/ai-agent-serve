@@ -482,6 +482,29 @@ Both proposal and confirmation require operator `decide`; retrieval requires `re
 
 This state machine performs no external calendar booking and sends no notification. Those transports remain separate dependencies.
 
+## Delivery execution status tracking
+
+Delivery execution state is kept separate from the request workflow status.
+
+A confirmed appointment may initialize exactly one durable delivery-status record in `scheduled` state. Initialization requires:
+
+- the same request;
+- the confirmed appointment;
+- the persisted delivery handoff/provider identity;
+- operator `decide`; and
+- an explicit scheduling reason.
+
+A separate human-controlled transition moves the record from `scheduled` to `in_progress` with an explicit start reason and timestamp.
+
+Exact retries are idempotent. Conflicting scheduling or start evidence fails closed.
+
+This slice deliberately excludes:
+
+- completion;
+- delays/exceptions;
+- customer/provider notification delivery; and
+- external calendar or dispatch operations.
+
 ## Current exclusions
 
 This routing stage does not yet include:
@@ -545,3 +568,6 @@ The Phase 6 notification-preparation PostgreSQL proof extends the governed quote
 
 
 The Phase 6 appointment PostgreSQL proof extends the governed flow through proposal and confirmation, verifies stable retry identity, persisted timestamps, exactly one proposal plus one confirmation audit event, and zero external calendar or messaging side effects.
+
+
+The Phase 6 delivery-status PostgreSQL proof extends the governed flow through confirmed appointment, scheduled execution, and in-progress execution. It verifies stable retry identities, persisted start evidence, exactly one scheduling plus one in-progress audit event, and no completion/exception/notification side effects.
