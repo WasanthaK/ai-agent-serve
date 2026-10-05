@@ -1,6 +1,7 @@
 import unittest
 from datetime import datetime, timezone
-from uuid import UUID
+from unittest.mock import MagicMock, patch
+from uuid import UUID, uuid4
 
 import training_workspace as workspace
 
@@ -126,6 +127,48 @@ class TrainingWorkspaceTests(unittest.TestCase):
             ["promote_skill"],
         )
         self.assertIsNone(result["blocked_reason"])
+
+    def test_list_training_cases_scopes_query_to_tenant(self):
+        tenant_id = uuid4()
+        connection = MagicMock()
+        cursor = (
+            connection.__enter__.return_value
+            .cursor.return_value.__enter__.return_value
+        )
+        cursor.fetchall.return_value = []
+
+        with patch.object(
+            workspace,
+            "get_connection",
+            return_value=connection,
+        ):
+            result = workspace.list_training_cases(
+                tenant_id=tenant_id,
+            )
+
+        self.assertEqual(result, [])
+        sql, params = cursor.execute.call_args.args
+        self.assertIn("request_tenant_id = %s", sql)
+        self.assertEqual(params, (tenant_id, 50))
+
+    def test_list_training_cases_legacy_scope_excludes_tenant_rows(self):
+        connection = MagicMock()
+        cursor = (
+            connection.__enter__.return_value
+            .cursor.return_value.__enter__.return_value
+        )
+        cursor.fetchall.return_value = []
+
+        with patch.object(
+            workspace,
+            "get_connection",
+            return_value=connection,
+        ):
+            workspace.list_training_cases(tenant_id=None)
+
+        sql, params = cursor.execute.call_args.args
+        self.assertIn("request_tenant_id IS NULL", sql)
+        self.assertEqual(params, (50,))
 
     def test_rejects_unknown_stage_and_invalid_limit(self):
         with self.assertRaises(

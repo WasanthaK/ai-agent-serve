@@ -24,6 +24,7 @@ TRAINING_STAGES = frozenset(
 )
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
+_UNSCOPED = object()
 
 
 class TrainingWorkspaceValidationError(ValueError):
@@ -202,6 +203,7 @@ _PROJECTION_SQL = """
         r.category AS request_category,
         r.summary AS request_summary,
         r.urgency AS request_urgency,
+        r.tenant_id AS request_tenant_id,
         p.id AS proposal_id,
         p.change_scope,
         p.proposed_change,
@@ -275,6 +277,7 @@ def list_training_cases(
     stage=None,
     skill_name=None,
     limit=DEFAULT_LIMIT,
+    tenant_id=_UNSCOPED,
 ):
     stage = _normalize_stage(stage)
     skill_name = _normalize_skill_name(skill_name)
@@ -282,6 +285,13 @@ def list_training_cases(
 
     filters = []
     params = []
+
+    if tenant_id is None:
+        filters.append("request_tenant_id IS NULL")
+    elif tenant_id is not _UNSCOPED:
+        _validate_uuid(tenant_id, "tenant_id")
+        filters.append("request_tenant_id = %s")
+        params.append(tenant_id)
 
     if stage is not None:
         filters.append("training_stage = %s")
@@ -312,11 +322,20 @@ def list_training_cases(
             return [_result(row) for row in cur.fetchall()]
 
 
-def get_training_case(evaluation_id):
+def get_training_case(evaluation_id, *, tenant_id=_UNSCOPED):
     evaluation_id = _validate_uuid(
         evaluation_id,
         "evaluation_id",
     )
+
+    filters = ["evaluation_id = %s"]
+    params = [evaluation_id]
+    if tenant_id is None:
+        filters.append("request_tenant_id IS NULL")
+    elif tenant_id is not _UNSCOPED:
+        _validate_uuid(tenant_id, "tenant_id")
+        filters.append("request_tenant_id = %s")
+        params.append(tenant_id)
 
     query = f"""
         WITH training_cases AS (
@@ -324,12 +343,12 @@ def get_training_case(evaluation_id):
         )
         SELECT *
         FROM training_cases
-        WHERE evaluation_id = %s
+        WHERE {" AND ".join(filters)}
     """
 
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(query, (evaluation_id,))
+            cur.execute(query, tuple(params))
             row = cur.fetchone()
             if row is None:
                 raise TrainingWorkspaceNotFoundError(

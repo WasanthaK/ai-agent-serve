@@ -622,23 +622,31 @@ Completed tenant-bound authentication context:
 - malformed tenant keys fail closed
 - legacy unbound credentials remain supported during migration
 
+Completed tenant-owned request ingress isolation:
+
+- durable tenant ownership for agent_requests, inbound_messages and website idempotency reservations implemented and CI-verified in PR #72
+- tenant-bound website and trusted WhatsApp request creation/replay/read/reply paths fail closed
+- legacy unbound identities remain limited to legacy unowned rows
+- inbound linkage and external-message/idempotency identities are tenant-scoped
+- SendGrid remains explicitly legacy/unowned until it has a tenant-binding authority model
+
 Current bounded work:
 
-- add durable tenant ownership to agent_requests, inbound_messages and website idempotency reservations
-- require configured tenant identity to resolve to an active durable tenant before tenant-owned request creation/access
-- enforce tenant-scoped website request creation, replay, retrieval and customer-reply access
-- propagate tenant ownership through trusted Quixo WhatsApp ingress when its credential is tenant-bound
-- keep legacy unbound paths limited to legacy unowned rows
-- prevent cross-tenant inbound-to-request linkage
-- scope external-message and website idempotency identities per tenant
-- leave SendGrid ingress explicitly legacy/unowned until it has a tenant-binding authority model; live SendGrid enablement remains deferred
-- do not yet claim full isolation for provider/delivery/closure/training downstream data
+- enforce one deterministic tenant ownership guard before every externally reachable request-owned operator route
+- preserve existing provider/RFQ/quote/delivery/closure/training business-state rules behind that guard
+- hide cross-tenant request existence with 404
+- fail closed when a bound tenant is missing or inactive
+- tenant-filter Training workspace list/detail reads through the joined request owner
+- keep non-request global metrics access on the existing permission-only boundary
 
 Planned next:
 
-- extend tenant checks through provider selection, RFQ, quote, delivery, closure and training request-owned reads/writes
-- bind provider directory data to tenant ownership
-- remove remaining unscoped request access from externally reachable operator paths
+- bind provider directory and provider eligibility data to tenant ownership inside the existing Quotes application workflow
+- preserve the canonical request -> provider selection -> RFQ -> quote -> award -> delivery lifecycle; do not create a parallel provider/quote subsystem
+- ensure provider eligibility, RFQ handoff and quote records continue to resolve through the same request identity used by the main Quotes app
+- prove provider selection cannot cross tenant boundaries
+- remove remaining internal unscoped request assumptions where they could become externally reachable
+- complete Phase 8A only after provider and downstream tenant isolation proofs are green
 
 Remaining Phase 8 capabilities:
 

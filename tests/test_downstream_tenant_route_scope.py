@@ -11,7 +11,7 @@ from fastapi import HTTPException
 INBOUND_KEY = "inbound-" + "a" * 40
 OPERATOR_KEY = "operator-" + "b" * 40
 OPERATORS = [{
-    "id": "tenant-reader",
+    "id": "tenant-operator",
     "key": OPERATOR_KEY,
     "permissions": ["read"],
     "tenant_key": "tenant-a",
@@ -27,18 +27,18 @@ with patch.dict(os.environ, {
     security = importlib.import_module("security")
 
 
-class TenantRequestScopeTests(unittest.TestCase):
+class DownstreamTenantRouteScopeTests(unittest.TestCase):
     def principal(self):
         return security.OperatorPrincipal(
-            "tenant-reader",
+            "tenant-operator",
             frozenset({"read"}),
             "tenant-a",
         )
 
-    def test_request_scope_uses_authenticated_tenant(self):
+    def test_matching_tenant_request_allows_operator(self):
         request_id = uuid4()
         tenant_id = uuid4()
-        stored = {"id": request_id, "tenant_id": tenant_id}
+        operator = self.principal()
 
         with (
             patch.object(
@@ -49,15 +49,15 @@ class TenantRequestScopeTests(unittest.TestCase):
             patch.object(
                 api,
                 "_tenant_scoped_get_request",
-                return_value=stored,
+                return_value={"id": request_id, "tenant_id": tenant_id},
             ) as get_request,
         ):
             result = api._require_operator_request_scope(
                 request_id,
-                self.principal(),
+                operator,
             )
 
-        self.assertEqual(result.id, "tenant-reader")
+        self.assertIs(result, operator)
         get_request.assert_called_once_with(
             request_id,
             tenant_id,
@@ -86,10 +86,25 @@ class TenantRequestScopeTests(unittest.TestCase):
                 )
 
         self.assertEqual(raised.exception.status_code, 404)
-        self.assertEqual(
-            raised.exception.detail,
-            "Request not found",
-        )
+        self.assertEqual(raised.exception.detail, "Request not found")
+
+    def test_inactive_or_missing_tenant_fails_closed(self):
+        request_id = uuid4()
+
+        with patch.object(
+            api,
+            "resolve_active_tenant_id",
+            side_effect=api.TenantScopeError(
+                "Authenticated tenant is not active"
+            ),
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                api._require_operator_request_scope(
+                    request_id,
+                    self.principal(),
+                )
+
+        self.assertEqual(raised.exception.status_code, 403)
 
 
 if __name__ == "__main__":
