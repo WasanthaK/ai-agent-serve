@@ -1103,6 +1103,7 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             {
                 "request_intake": "1.0.0",
                 "request_clarification": "1.0.0",
+                "safety_triage": "1.0.0",
             },
         )
 
