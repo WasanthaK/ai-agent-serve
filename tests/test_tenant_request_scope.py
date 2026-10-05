@@ -6,7 +6,6 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from fastapi import HTTPException
-from starlette.requests import Request
 
 
 INBOUND_KEY = "inbound-" + "a" * 40
@@ -25,19 +24,18 @@ with patch.dict(os.environ, {
     "AGENT_OPERATOR_CREDENTIALS": json.dumps(OPERATORS),
 }):
     api = importlib.import_module("app")
-
-
-def http_request():
-    return Request({
-        "type": "http",
-        "method": "GET",
-        "path": "/requests/test",
-        "headers": [],
-    })
+    security = importlib.import_module("security")
 
 
 class TenantRequestScopeTests(unittest.TestCase):
-    def test_request_read_uses_authenticated_tenant_scope(self):
+    def principal(self):
+        return security.OperatorPrincipal(
+            "tenant-reader",
+            frozenset({"read"}),
+            "tenant-a",
+        )
+
+    def test_request_scope_uses_authenticated_tenant(self):
         request_id = uuid4()
         tenant_id = uuid4()
         stored = {"id": request_id, "tenant_id": tenant_id}
@@ -45,21 +43,24 @@ class TenantRequestScopeTests(unittest.TestCase):
         with (
             patch.object(
                 api,
-                "tenant_id_from_request",
+                "resolve_active_tenant_id",
                 return_value=tenant_id,
             ),
             patch.object(
                 api,
-                "get_request",
+                "_tenant_scoped_get_request",
                 return_value=stored,
             ) as get_request,
         ):
-            result = api.retrieve_request(request_id, http_request())
+            result = api._require_operator_request_scope(
+                request_id,
+                self.principal(),
+            )
 
-        self.assertEqual(result, stored)
+        self.assertEqual(result.id, "tenant-reader")
         get_request.assert_called_once_with(
             request_id,
-            tenant_id=tenant_id,
+            tenant_id,
         )
 
     def test_cross_tenant_request_is_hidden_as_not_found(self):
@@ -69,22 +70,25 @@ class TenantRequestScopeTests(unittest.TestCase):
         with (
             patch.object(
                 api,
-                "tenant_id_from_request",
+                "resolve_active_tenant_id",
                 return_value=tenant_id,
             ),
             patch.object(
                 api,
-                "get_request",
+                "_tenant_scoped_get_request",
                 return_value=None,
-            ) as get_request,
+            ),
         ):
             with self.assertRaises(HTTPException) as raised:
-                api.retrieve_request(request_id, http_request())
+                api._require_operator_request_scope(
+                    request_id,
+                    self.principal(),
+                )
 
         self.assertEqual(raised.exception.status_code, 404)
-        get_request.assert_called_once_with(
-            request_id,
-            tenant_id=tenant_id,
+        self.assertEqual(
+            raised.exception.detail,
+            "Request not found",
         )
 
 
