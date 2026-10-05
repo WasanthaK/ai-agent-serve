@@ -505,6 +505,36 @@ This slice deliberately excludes:
 - customer/provider notification delivery; and
 - external calendar or dispatch operations.
 
+## Delivery delay and exception recording
+
+Operational exceptions are recorded as immutable evidence attached to the durable delivery-status record.
+
+Supported kinds are deliberately limited to:
+
+- `delay`;
+- `service_issue`.
+
+Each exception carries:
+
+- caller-supplied UUID retry identity;
+- the exact request/delivery/provider identity;
+- timezone-aware occurrence timestamp;
+- explicit human-authored summary;
+- optional expected-resolution timestamp after occurrence; and
+- recording operator.
+
+A `delay` may be recorded while delivery is `scheduled` or `in_progress`. A `service_issue` requires `in_progress` delivery.
+
+Exact retries with the same UUID/evidence are idempotent. Reusing an exception UUID with conflicting evidence fails closed.
+
+This slice does not:
+
+- resolve the exception;
+- change request or delivery status;
+- create a human-intervention queue item;
+- send any notification; or
+- perform any external action.
+
 ## Current exclusions
 
 This routing stage does not yet include:
@@ -571,3 +601,6 @@ The Phase 6 appointment PostgreSQL proof extends the governed flow through propo
 
 
 The Phase 6 delivery-status PostgreSQL proof extends the governed flow through confirmed appointment, scheduled execution, and in-progress execution. It verifies stable retry identities, persisted start evidence, exactly one scheduling plus one in-progress audit event, and no completion/exception/notification side effects.
+
+
+The Phase 6 delivery-exception PostgreSQL proof records both a delay and an in-progress service issue, verifies UUID-based exact retry idempotency, preserves chronological retrieval, writes one audit event per unique exception, and proves no resolution/intervention/notification side effects.

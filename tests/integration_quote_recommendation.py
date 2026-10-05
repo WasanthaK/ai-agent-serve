@@ -44,6 +44,10 @@ from delivery_status import (
     initialize_delivery_status,
     start_delivery,
 )
+from delivery_exception import (
+    get_delivery_exceptions,
+    record_delivery_exception,
+)
 
 
 def ready_analysis():
@@ -526,6 +530,71 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         for event in status_events:
             self.assertFalse(event["details"]["completion_recorded"])
             self.assertFalse(event["details"]["exception_recorded"])
+            self.assertFalse(event["details"]["notification_sent"])
+
+        delay_id = uuid4()
+        occurred_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+        expected_resolution_at = occurred_at + timedelta(hours=1)
+        delay = record_delivery_exception(
+            request_id,
+            UUID(delivery_status["delivery_status_id"]),
+            delay_id,
+            "delay",
+            occurred_at,
+            summary="Provider reported a one-hour delay.",
+            expected_resolution_at=expected_resolution_at,
+            actor="operator:ci",
+        )
+        delay_retry = record_delivery_exception(
+            request_id,
+            UUID(delivery_status["delivery_status_id"]),
+            delay_id,
+            "delay",
+            occurred_at,
+            summary="Provider reported a one-hour delay.",
+            expected_resolution_at=expected_resolution_at,
+            actor="operator:ci",
+        )
+
+        self.assertEqual(delay_retry["exception_id"], delay["exception_id"])
+        self.assertEqual(delay["exception_kind"], "delay")
+        self.assertFalse(delay["resolved"])
+        self.assertFalse(delay["human_intervention_created"])
+        self.assertFalse(delay["notification_sent"])
+
+        issue_id = uuid4()
+        issue = record_delivery_exception(
+            request_id,
+            UUID(delivery_status["delivery_status_id"]),
+            issue_id,
+            "service_issue",
+            occurred_at + timedelta(minutes=1),
+            summary="Unexpected access issue encountered during service.",
+            actor="operator:ci",
+        )
+        self.assertEqual(issue["exception_kind"], "service_issue")
+
+        persisted_exceptions = get_delivery_exceptions(request_id)
+        self.assertEqual(
+            [item["exception_id"] for item in persisted_exceptions],
+            [str(delay_id), str(issue_id)],
+        )
+
+        exception_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"] == "delivery_exception_recorded"
+        ]
+        self.assertEqual(len(exception_events), 2)
+        self.assertEqual(
+            [event["details"]["exception_kind"] for event in exception_events],
+            ["delay", "service_issue"],
+        )
+        for event in exception_events:
+            self.assertFalse(event["details"]["resolved"])
+            self.assertFalse(
+                event["details"]["human_intervention_created"]
+            )
             self.assertFalse(event["details"]["notification_sent"])
 
 

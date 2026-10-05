@@ -140,6 +140,14 @@ from delivery_status import (
     initialize_delivery_status,
     start_delivery,
 )
+from delivery_exception import (
+    DeliveryExceptionConflictError,
+    DeliveryExceptionNotFoundError,
+    DeliveryExceptionStateError,
+    DeliveryExceptionValidationError,
+    get_delivery_exceptions,
+    record_delivery_exception,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -245,6 +253,15 @@ class DeliveryStatusInitializeInput(BaseModel):
 class DeliveryStatusStartInput(BaseModel):
     delivery_status_id: UUID
     reason: str = Field(min_length=1, max_length=2000)
+
+
+class DeliveryExceptionInput(BaseModel):
+    exception_id: UUID
+    delivery_status_id: UUID
+    exception_kind: str = Field(min_length=1, max_length=40)
+    occurred_at: datetime
+    summary: str = Field(min_length=1, max_length=2000)
+    expected_resolution_at: Optional[datetime] = None
 
 
 class CustomerReply(BaseModel):
@@ -1223,6 +1240,48 @@ def start_request_delivery(
     except (
         DeliveryStatusStateError,
         DeliveryStatusConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/delivery-exceptions",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_delivery_exceptions(request_id: UUID):
+    try:
+        return {
+            "request_id": str(request_id),
+            "exceptions": get_delivery_exceptions(request_id),
+        }
+    except DeliveryExceptionValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/requests/{request_id}/delivery-exceptions")
+def record_request_delivery_exception(
+    request_id: UUID,
+    payload: DeliveryExceptionInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return record_delivery_exception(
+            request_id,
+            payload.delivery_status_id,
+            payload.exception_id,
+            payload.exception_kind,
+            payload.occurred_at,
+            summary=payload.summary,
+            expected_resolution_at=payload.expected_resolution_at,
+            actor=operator.actor,
+        )
+    except DeliveryExceptionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DeliveryExceptionValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        DeliveryExceptionStateError,
+        DeliveryExceptionConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
