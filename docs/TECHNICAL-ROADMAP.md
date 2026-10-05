@@ -346,15 +346,24 @@ Completed human quote award:
 - exact retries are idempotent and conflicting awards fail closed
 - award creates no provider contact, dispatch, or request-state mutation
 
+Completed post-award delivery handoff:
+
+- immutable internal service-delivery handoff implemented and CI-verified in PR #50
+- awarded provider, price, currency, scope, exclusions, terms, availability and duration are snapshotted
+- request transition to the existing `actioned` state and `actioned_at` is atomic with handoff creation
+- writes require operator `decide`; reads require `read`
+- exact retries are idempotent and conflicting handoffs fail closed
+- handoff creates no provider contact, dispatch, appointment or notification send
+
 Current bounded work:
 
-- create one immutable internal service-delivery handoff from the human quote award
-- snapshot awarded provider, price, currency, scope, exclusions, terms, availability and duration
-- atomically transition the request to the existing `actioned` status and set `actioned_at`
-- require operator `decide` to activate and `read` to retrieve
-- make exact retries idempotent and conflicting handoffs fail closed
-- write `delivery_handoff_activated` transactionally
-- do not contact the provider, create dispatch, create an appointment, or send notifications in this slice
+- prepare one durable customer notification and one durable provider notification from the delivery handoff
+- derive message purpose and content deterministically from persisted delivery facts
+- keep delivery destination/channel unresolved because provider contact destinations are not yet modeled
+- require operator `decide` to prepare and `read` to retrieve
+- make repeated preparation idempotent
+- write `delivery_notifications_prepared` transactionally
+- do not send email, WhatsApp, SMS or any other external message in this slice
 
 Routing roadmap:
 
@@ -389,14 +398,18 @@ Purchase-order creation remains outside the initial scope.
 
 ## Phase 6 — Service-delivery coordination
 
+Completed:
+
+- Post-award internal delivery handoff and request transition to `actioned` — PR #50
+
 Current bounded work:
 
-- Post-award internal delivery handoff and request transition to `actioned`
+- Durable customer/provider notification preparation with unresolved destinations
 
 Planned next:
 
+- Notification destination resolution and delivery authorization
 - Appointment proposals and confirmation
-- Customer and provider notifications
 - Status tracking
 - Delay and exception handling
 - Human intervention queues

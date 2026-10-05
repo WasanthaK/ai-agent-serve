@@ -115,6 +115,13 @@ from delivery_handoff import (
     activate_delivery_handoff,
     get_delivery_handoff,
 )
+from delivery_notification import (
+    DeliveryNotificationNotFoundError,
+    DeliveryNotificationStateError,
+    DeliveryNotificationValidationError,
+    get_prepared_delivery_notifications,
+    prepare_delivery_notifications,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -1003,6 +1010,48 @@ def activate_request_delivery_handoff(
         DeliveryHandoffStateError,
         DeliveryHandoffConflictError,
     ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/delivery-notifications",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_delivery_notifications(request_id: UUID):
+    try:
+        notifications = get_prepared_delivery_notifications(request_id)
+    except DeliveryNotificationValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if not notifications:
+        raise HTTPException(
+            status_code=404,
+            detail="Prepared delivery notifications not found",
+        )
+
+    return {
+        "request_id": str(request_id),
+        "notifications": notifications,
+        "destinations_resolved": False,
+        "sent": False,
+    }
+
+
+@app.post("/requests/{request_id}/delivery-notifications")
+def prepare_request_delivery_notifications(
+    request_id: UUID,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return prepare_delivery_notifications(
+            request_id,
+            actor=operator.actor,
+        )
+    except DeliveryNotificationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DeliveryNotificationValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except DeliveryNotificationStateError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
