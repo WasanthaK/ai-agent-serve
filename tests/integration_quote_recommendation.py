@@ -3,6 +3,9 @@ from datetime import date, datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from db import get_connection, get_request, get_request_events, save_request
+from agent_skills import skill_registry
+from agent_skills.definitions import BUILT_IN_SKILLS
+from agent_skills.registry import SkillRegistry
 from provider_directory import (
     add_provider_coverage_area,
     add_provider_service_capability,
@@ -91,6 +94,11 @@ from skill_revision import (
     SkillRevisionConflictError,
     create_skill_improvement_revision,
     get_skill_improvement_revisions,
+)
+from skill_promotion import (
+    get_skill_promotions,
+    load_active_skill_promotions,
+    promote_skill,
 )
 from training_workspace import (
     get_training_case,
@@ -1617,11 +1625,107 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             revised_ready_case["regression"]["revision_id"],
             revision["revision_id"],
         )
-        self.assertEqual(
-            revised_ready_case["blocked_reason"],
-            "promotion_not_supported",
+        self.assertIsNone(
+            revised_ready_case["blocked_reason"]
         )
-        self.assertFalse(revised_ready_case["promotion_supported"])
+        self.assertTrue(revised_ready_case["promotion_supported"])
+        self.assertEqual(
+            revised_ready_case["supported_actions"],
+            ["promote_skill"],
+        )
+
+        promotion = promote_skill(
+            request_id,
+            UUID(revised_regression["regression_test_id"]),
+            reason=(
+                "Human reviewer approved the regression-passed safety "
+                "triage revision for production use."
+            ),
+            actor="operator:ci",
+        )
+        promotion_retry = promote_skill(
+            request_id,
+            UUID(revised_regression["regression_test_id"]),
+            reason=(
+                "Human reviewer approved the regression-passed safety "
+                "triage revision for production use."
+            ),
+            actor="operator:ci",
+        )
+        self.assertEqual(
+            promotion_retry["promotion_id"],
+            promotion["promotion_id"],
+        )
+        self.assertEqual(
+            promotion["promoted_skill_version"],
+            "1.1.0",
+        )
+        self.assertTrue(promotion["promotion_applied"])
+        self.assertTrue(promotion["production_behaviour_changed"])
+
+        active_safety = skill_registry.get("safety_triage")
+        self.assertEqual(active_safety.version, "1.1.0")
+        self.assertIn(
+            "excluding ordinary requests whose only issue is missing details",
+            active_safety.instructions,
+        )
+
+        promoted_case = get_training_case(
+            UUID(safety_evaluation["evaluation_id"])
+        )
+        self.assertEqual(
+            promoted_case["training_stage"],
+            "promoted",
+        )
+        self.assertEqual(
+            promoted_case["promotion"]["promoted_skill_version"],
+            "1.1.0",
+        )
+        self.assertEqual(promoted_case["supported_actions"], [])
+        self.assertFalse(promoted_case["promotion_supported"])
+        self.assertTrue(
+            promoted_case["production_behaviour_changed"]
+        )
+
+        persisted_promotions = get_skill_promotions(request_id)
+        self.assertEqual(len(persisted_promotions), 1)
+        self.assertEqual(
+            persisted_promotions[0]["promotion_id"],
+            promotion["promotion_id"],
+        )
+
+        fresh_registry = SkillRegistry()
+        for built_in_skill in BUILT_IN_SKILLS:
+            fresh_registry.register(built_in_skill)
+        restored_count = load_active_skill_promotions(
+            registry=fresh_registry
+        )
+        self.assertGreaterEqual(restored_count, 1)
+        self.assertEqual(
+            fresh_registry.get("safety_triage").version,
+            "1.1.0",
+        )
+        self.assertIn(
+            "excluding ordinary requests whose only issue is missing details",
+            fresh_registry.get("safety_triage").instructions,
+        )
+
+        promotion_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"] == "skill_promotion_applied"
+        ]
+        self.assertEqual(len(promotion_events), 1)
+        self.assertTrue(
+            promotion_events[0]["details"]["human_authorized"]
+        )
+        self.assertTrue(
+            promotion_events[0]["details"]["regression_gate_passed"]
+        )
+        self.assertEqual(
+            promotion_events[0]["details"]["promoted_skill_version"],
+            "1.1.0",
+        )
 
         revision_events = [
             event
