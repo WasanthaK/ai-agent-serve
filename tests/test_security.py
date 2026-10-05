@@ -1339,6 +1339,44 @@ class RouteAuthorizationTests(unittest.TestCase):
             self.assertEqual(allowed.status_code, 200)
             retrieve.assert_called_once_with(evaluation_id)
 
+    def test_skill_promotion_requires_decide_permission(self):
+        regression_test_id = uuid4()
+        payload = {
+            "regression_test_id": str(regression_test_id),
+            "reason": "Regression evidence passed human review.",
+        }
+        result = {
+            "promotion_id": str(uuid4()),
+            "request_id": str(self.request_id),
+            "regression_test_id": str(regression_test_id),
+            "skill_name": "request_clarification",
+            "base_skill_version": "1.0.0",
+            "promoted_skill_version": "1.1.0",
+            "promotion_applied": True,
+        }
+
+        with patch.object(api, "promote_skill", return_value=result) as promote:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/skill-promotions",
+                json=payload,
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            promote.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/skill-promotions",
+                json=payload,
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            promote.assert_called_once_with(
+                self.request_id,
+                regression_test_id,
+                reason=payload["reason"],
+                actor="operator:wasantha",
+            )
+
     def test_skill_improvement_revision_permissions(self):
         proposal_id = uuid4()
         revision_id = uuid4()
