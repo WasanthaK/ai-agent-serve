@@ -162,10 +162,6 @@ def _load_channel_bound_inbound_credentials() -> tuple[tuple[bytes, str], ...]:
             raise RuntimeError(
                 "Inbound tenant_key must be a canonical tenant key"
             )
-        if tenant_key is not None and not _valid_tenant_key(tenant_key):
-            raise RuntimeError(
-                "Operator tenant_key must be a canonical tenant key"
-            )
         if (
             not isinstance(keys, list)
             or not 1 <= len(keys) <= 2
@@ -235,6 +231,10 @@ def load_credentials() -> tuple[tuple[bytes, ...], tuple[tuple[bytes, OperatorPr
             or operator_id in ids
         ):
             raise RuntimeError("Operator IDs must be unique, stable identifiers")
+        if tenant_key is not None and not _valid_tenant_key(tenant_key):
+            raise RuntimeError(
+                "Operator tenant_key must be a canonical tenant key"
+            )
         if (
             not isinstance(keys, list)
             or not 1 <= len(keys) <= 2
