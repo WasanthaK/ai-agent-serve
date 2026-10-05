@@ -192,6 +192,14 @@ from outcome_measurement import (
     OutcomeMeasurementValidationError,
     get_outcome_measurement,
 )
+from skill_evaluation import (
+    SkillEvaluationConflictError,
+    SkillEvaluationNotFoundError,
+    SkillEvaluationStateError,
+    SkillEvaluationValidationError,
+    create_skill_evaluation,
+    get_skill_evaluations,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -342,6 +350,13 @@ class ClosureEscalationInput(BaseModel):
     escalation_kind: str = Field(min_length=1, max_length=20)
     priority: str = Field(min_length=1, max_length=20)
     reason: str = Field(min_length=1, max_length=4000)
+
+
+class SkillEvaluationInput(BaseModel):
+    analysis_event_id: UUID
+    skill_name: str = Field(min_length=1, max_length=120)
+    verdict: str = Field(min_length=1, max_length=20)
+    notes: str = Field(min_length=1, max_length=4000)
 
 
 class CustomerReply(BaseModel):
@@ -661,6 +676,46 @@ def record_request_satisfaction_response(
     except (
         SatisfactionFollowUpStateError,
         SatisfactionFollowUpConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/skill-evaluations",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_skill_evaluations(request_id: UUID):
+    try:
+        return {
+            "request_id": str(request_id),
+            "evaluations": get_skill_evaluations(request_id),
+        }
+    except SkillEvaluationValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/requests/{request_id}/skill-evaluations")
+def create_request_skill_evaluation(
+    request_id: UUID,
+    payload: SkillEvaluationInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return create_skill_evaluation(
+            request_id,
+            payload.analysis_event_id,
+            payload.skill_name,
+            verdict=payload.verdict,
+            notes=payload.notes,
+            actor=operator.actor,
+        )
+    except SkillEvaluationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SkillEvaluationValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        SkillEvaluationStateError,
+        SkillEvaluationConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
