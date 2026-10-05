@@ -163,11 +163,13 @@ from delivery_timeline import (
     get_delivery_timeline,
 )
 from satisfaction_follow_up import (
+    SatisfactionFollowUpConflictError,
     SatisfactionFollowUpNotFoundError,
     SatisfactionFollowUpStateError,
     SatisfactionFollowUpValidationError,
     get_satisfaction_follow_up,
     prepare_satisfaction_follow_up,
+    record_satisfaction_response,
 )
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
@@ -299,6 +301,14 @@ class HumanInterventionCreateInput(BaseModel):
 class HumanInterventionAcknowledgeInput(BaseModel):
     intervention_id: UUID
     reason: str = Field(min_length=1, max_length=2000)
+
+
+class SatisfactionResponseInput(BaseModel):
+    follow_up_id: UUID
+    rating: int = Field(ge=1, le=5)
+    responded_at: datetime
+    response_source: str = Field(min_length=1, max_length=100)
+    comment: Optional[str] = Field(default=None, max_length=4000)
 
 
 class CustomerReply(BaseModel):
@@ -593,6 +603,33 @@ def retrieve_request(request_id: UUID):
         )
 
     return request
+
+
+@app.post("/requests/{request_id}/satisfaction-follow-up/response")
+def record_request_satisfaction_response(
+    request_id: UUID,
+    payload: SatisfactionResponseInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return record_satisfaction_response(
+            request_id,
+            payload.follow_up_id,
+            rating=payload.rating,
+            responded_at=payload.responded_at,
+            response_source=payload.response_source,
+            comment=payload.comment,
+            actor=operator.actor,
+        )
+    except SatisfactionFollowUpNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SatisfactionFollowUpValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        SatisfactionFollowUpStateError,
+        SatisfactionFollowUpConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.get(
