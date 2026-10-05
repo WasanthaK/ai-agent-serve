@@ -115,7 +115,7 @@ def _load_legacy_inbound_keys() -> list[str]:
     return inbound_keys
 
 
-def _load_channel_bound_inbound_credentials() -> tuple[tuple[bytes, str], ...]:
+def _load_channel_bound_inbound_credentials() -> tuple[tuple[bytes, str, str | None], ...]:
     configured = os.getenv("AGENT_INBOUND_CREDENTIALS", "")
     if not configured:
         return ()
