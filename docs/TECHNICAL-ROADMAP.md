@@ -412,14 +412,14 @@ Completed service completion confirmation:
 - higher-level request status remains `actioned`
 - no completion notification or external action is performed
 
-Current bounded work:
+Completed delivery event history:
 
-- expose a deterministic read-only Phase 6 delivery timeline reconstructed from append-only audit events
-- include every current `delivery_*` and `human_intervention_*` event in stable order
-- preserve original event ID, actor, correlation ID, details, and timestamp
-- label known lifecycle stages without hiding future delivery event types
-- provide summary flags for completion, exceptions, and interventions
-- require operator `read` only; introduce no write or execution authority
+- deterministic read-only Phase 6 delivery timeline implemented and CI-verified in PR #57
+- current `delivery_*` and `human_intervention_*` events are reconstructed in stable order
+- original event ID, actor, correlation ID, details, and timestamp are preserved
+- known lifecycle stages are labeled while unknown future delivery events remain visible
+- summary flags expose completion, exception, and intervention history
+- access requires operator `read` only and introduces no write or execution authority
 
 Routing roadmap:
 
@@ -463,10 +463,9 @@ Completed:
 - Immutable delay and service-issue recording against active delivery — PR #54
 - Human intervention queue creation and acknowledgement — PR #55
 - Human-controlled service completion confirmation: `in_progress` → `completed` — PR #56
+- Complete read-only Phase 6 delivery event history — PR #57
 
-Current bounded work:
-
-- Complete read-only Phase 6 delivery event history
+Dependency-independent Phase 6 software work is complete.
 
 Deferred messaging-dependent work:
 
@@ -474,7 +473,19 @@ Deferred messaging-dependent work:
 
 ## Phase 7 — Closure and learning
 
-- Customer satisfaction follow-up
+Current bounded work:
+
+- prepare one durable customer satisfaction follow-up only after completed delivery
+- use deterministic 1–5 satisfaction question text
+- leave destination channel/address unresolved
+- require operator `decide` for preparation and `read` for retrieval
+- make repeated preparation idempotent
+- record `customer_satisfaction_follow_up_prepared` transactionally
+- do not send the follow-up or record a customer response in this slice
+
+Planned next:
+
+- Satisfaction response ingestion
 - Review-request workflows
 - Complaint and rework escalation
 - Outcome measurement
