@@ -13,6 +13,9 @@ ALTER TABLE service_satisfaction_followups
         CHECK (status IN ('prepared', 'responded'));
 
 ALTER TABLE service_satisfaction_followups
+    DROP CONSTRAINT IF EXISTS satisfaction_followup_response_consistency;
+
+ALTER TABLE service_satisfaction_followups
     ADD CONSTRAINT satisfaction_followup_response_consistency
         CHECK (
             (
