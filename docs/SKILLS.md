@@ -2,9 +2,11 @@
 
 ## Purpose
 
-Skills package reusable service-delivery knowledge, schemas and policies separately from API routes and concrete tools.
+Skills package reusable domain expertise, service-delivery knowledge, schemas and policies separately from API routes and concrete tools.
 
-A skill describes how the agent should reason about one business capability. A tool performs an operation. Workflow state determines whether either capability may be used.
+The long-term goal is not generic classification. Each selectable domain should evolve toward an expert skill pack capable of turning imperfect real-world requirements into a commercially useful scope while representing uncertainty truthfully.
+
+A skill describes how the agent should reason. A tool performs an operation. Workflow state and deterministic policy determine whether either capability may be used. Transactional authority remains in the external Quotes platform.
 
 ## Skill contract
 
@@ -121,3 +123,50 @@ python3 tests/smoke_phase4.py
 ```
 
 A skill change is not complete until both its unit tests and the relevant end-to-end workflow tests pass.
+
+
+## Domain Expert Skill Packs
+
+A mature domain skill may define:
+
+- domain ontology and terminology
+- intake/scoping topics
+- diagnostic reasoning patterns
+- clarification strategy
+- work-breakdown patterns
+- materials/equipment concepts
+- labour concepts
+- typical dependencies
+- assumptions/exclusions guidance
+- safety and compliance escalation
+- pricing-readiness rules
+- inspection-required rules
+- environmental/context dependencies
+- confidence/evidence rules
+- domain regression fixtures
+- known failure modes
+
+Examples include plumbing, HVAC, electrical, roofing, exterior painting, landscaping, automotive and event services.
+
+Domain skill packs remain independently versioned and regression-tested.
+
+## Context dependencies
+
+A domain skill may declare external context it knows how to interpret, for example weather, wind, humidity, heat, flood/fire alerts, tides or daylight.
+
+The skill interprets context. It does not gain authority to reschedule, commit price, contact a customer/provider or alter Quotes transactional state.
+
+## Commercial Requirement Package
+
+The target primary output of expert skills is the versioned Commercial Requirement Package defined in `docs/AGENT-QUOTES-BOUNDARY.md`.
+
+This contract must preserve the distinction between:
+
+- supplied facts
+- expert inference
+- assumptions
+- estimates
+- unknown/missing information
+- safety-critical uncertainty
+
+A Quotes adapter translates approved package data into supported Quotes API contracts. Skills must never depend directly on Quotes database models.
