@@ -559,6 +559,77 @@ class RouteAuthorizationTests(unittest.TestCase):
                 "operator:wasantha",
             )
 
+    def test_delivery_appointment_actions_require_decide_permission(self):
+        appointment_id = uuid4()
+        proposal_payload = {
+            "proposed_start_at": "2027-01-01T10:00:00Z",
+            "proposed_end_at": "2027-01-01T12:00:00Z",
+            "reason": "Human proposed a service window",
+        }
+        confirmation_payload = {
+            "appointment_id": str(appointment_id),
+            "reason": "Human confirmed the service window",
+        }
+
+        proposal_result = {
+            "appointment_id": str(appointment_id),
+            "request_id": str(self.request_id),
+            "status": "proposed",
+        }
+        confirmation_result = {
+            "appointment_id": str(appointment_id),
+            "request_id": str(self.request_id),
+            "status": "confirmed",
+        }
+
+        with patch.object(
+            api,
+            "propose_delivery_appointment",
+            return_value=proposal_result,
+        ) as propose:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/delivery-appointment/proposal",
+                json=proposal_payload,
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            propose.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/delivery-appointment/proposal",
+                json=proposal_payload,
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                propose.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
+        with patch.object(
+            api,
+            "confirm_delivery_appointment",
+            return_value=confirmation_result,
+        ) as confirm:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/delivery-appointment/confirmation",
+                json=confirmation_payload,
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            confirm.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/delivery-appointment/confirmation",
+                json=confirmation_payload,
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                confirm.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)
