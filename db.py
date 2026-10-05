@@ -120,8 +120,8 @@ def save_request(
                     status,
                     missing_information,
                     follow_up_questions,
-                    correlation_id,
-                    tenant_id
+                    tenant_id,
+                    correlation_id
                 )
                 VALUES (
                     %s, %s, %s, %s, %s,
@@ -143,8 +143,8 @@ def save_request(
                     status,
                     Jsonb(missing_information),
                     Jsonb(follow_up_questions),
-                    correlation_id,
                     tenant_id,
+                    correlation_id,
                 ),
             )
 
