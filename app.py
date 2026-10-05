@@ -162,6 +162,13 @@ from delivery_timeline import (
     DeliveryTimelineValidationError,
     get_delivery_timeline,
 )
+from satisfaction_follow_up import (
+    SatisfactionFollowUpNotFoundError,
+    SatisfactionFollowUpStateError,
+    SatisfactionFollowUpValidationError,
+    get_satisfaction_follow_up,
+    prepare_satisfaction_follow_up,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -586,6 +593,42 @@ def retrieve_request(request_id: UUID):
         )
 
     return request
+
+
+@app.get(
+    "/requests/{request_id}/satisfaction-follow-up",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_satisfaction_follow_up(request_id: UUID):
+    try:
+        follow_up = get_satisfaction_follow_up(request_id)
+    except SatisfactionFollowUpValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if follow_up is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Satisfaction follow-up not found",
+        )
+    return follow_up
+
+
+@app.post("/requests/{request_id}/satisfaction-follow-up")
+def prepare_request_satisfaction_follow_up(
+    request_id: UUID,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return prepare_satisfaction_follow_up(
+            request_id,
+            actor=operator.actor,
+        )
+    except SatisfactionFollowUpNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SatisfactionFollowUpValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except SatisfactionFollowUpStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.get(
