@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS service_skill_evaluations (
     request_id UUID NOT NULL
         REFERENCES agent_requests(id) ON DELETE CASCADE,
     analysis_event_id UUID NOT NULL
-        REFERENCES agent_events(id) ON DELETE RESTRICT,
+        REFERENCES agent_events(id) ON DELETE CASCADE,
     skill_name TEXT NOT NULL,
     skill_version TEXT NOT NULL,
     verdict TEXT NOT NULL,
