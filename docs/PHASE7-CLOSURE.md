@@ -347,8 +347,38 @@ The console supports the actions already authorized by the backend:
 - create an improvement proposal for `needs_improvement_proposal`;
 - record bounded human-reviewed regression evidence for `needs_regression_test`;
 - create an immutable revision for `regression_failed`; and
-- view `accepted` and `ready_for_promotion_review` states.
+- view `accepted`, `ready_for_promotion_review`, and promoted states.
 
-The UI does not add authority. All reads and writes continue to pass through the existing `read` and `decide` API permission checks. Promotion remains deliberately unavailable and is presented as a blocked future capability.
+The UI does not add authority. All reads and writes continue to pass through the existing `read` and `decide` API permission checks. Promotion is available only when the backend proves the latest candidate has passing regression evidence and the caller has operator `decide`.
 
 The response uses no-store/no-referrer/frame-denial and a restrictive same-origin content-security policy so the operator console does not weaken the existing credential boundary.
+
+
+## Controlled skill promotion
+
+Controlled promotion is the Phase 7 activation boundary where a tested human-reviewed change becomes part of the live skill registry.
+
+Promotion requires:
+
+- the exact persisted request and regression-test IDs;
+- regression verdict `pass`;
+- the regression evidence to belong to the latest revision when a revision exists;
+- the improvement proposal to remain in `proposed`;
+- the live registered skill version to exactly equal the proposal base version;
+- the live registered instructions to exactly equal the proposal base instruction snapshot;
+- an explicit human promotion reason; and
+- operator `decide`.
+
+The promoted version is deterministic: `major.minor.patch` advances to the next minor version, for example `1.0.0 -> 1.1.0`.
+
+The reviewed amendment is appended to the immutable base instruction snapshot rather than replacing the whole skill prompt. Existing schema, required fields, permitted states, permitted tools, and other skill metadata remain unchanged.
+
+Promotion is written durably before live activation. The promotion record stores the exact proposal, optional revision, regression evidence, skill name, base version, promoted version, base instruction snapshot, promoted instructions, human reason and actor. Exact retries are idempotent; conflicting promotion evidence fails closed.
+
+After persistence, the runtime registry replaces the skill only when its current version and instructions still match the expected base. Every new analysis call takes an atomic snapshot of the current skill instructions, schema and versions, and the exact version map used for that call is persisted into request provenance.
+
+At runtime startup, durable promotion history is replayed in order into the built-in registry, making promoted versions restart-safe without editing the source definition file.
+
+The Training console exposes `promote_skill` only for `ready_for_promotion_review`. After promotion, the case moves to `promoted`, shows the new live version, and exposes no further action under the old proposal.
+
+Production behaviour may change only through this explicit human-authorized, regression-passed promotion boundary. Unreviewed model output still has no authority to change live behavior.
