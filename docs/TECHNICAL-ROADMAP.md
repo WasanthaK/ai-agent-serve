@@ -607,19 +607,26 @@ Production behaviour must never change solely because of unreviewed model output
 
 ### Phase 8A — Multi-tenant isolation
 
+Completed tenant identity foundation:
+
+- durable tenant identity and lifecycle implemented and CI-verified in PR #70
+- canonical tenant keys and explicit pending/active/suspended/closed states
+- append-only tenant lifecycle audit events
+- PostgreSQL create/read/status-transition proof
+- identity foundation does not itself claim tenant isolation
+
 Current bounded work:
 
-- establish durable tenant identity before attaching business data to tenants
-- use canonical tenant keys and explicit lifecycle states
-- preserve an append-only tenant lifecycle audit trail
-- prove tenant create/read/status transitions on PostgreSQL
-- do not claim isolation until requests, providers, credentials and every access path are tenant-bound
-- do not expose tenant-management API authority in this identity-only slice
+- bind authenticated operators and inbound channels to optional explicit tenant identity
+- carry tenant identity in the authenticated request context without changing existing route return contracts
+- preserve legacy unbound credentials during the migration so the current deployment does not break
+- validate configured tenant keys fail-closed against the canonical tenant-key format
+- do not yet enforce tenant ownership because request/inbound rows are not tenant-bound in this slice
 
 Planned next:
 
-- bind authenticated principals and inbound channels to explicit tenant identity
 - add tenant ownership to requests and inbound messages
+- require tenant-bound identities for tenant-owned request creation/access paths
 - enforce tenant-scoped reads/writes fail-closed
 - extend provider and downstream request-owned data isolation through deterministic tenant joins
 

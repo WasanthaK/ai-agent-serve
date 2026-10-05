@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader
 
+from tenant_directory import TENANT_KEY_PATTERN
 from request_controls import (
     DEFAULT_INBOUND_RATE_LIMIT_PER_MINUTE,
     DEFAULT_OPERATOR_RATE_LIMIT_PER_MINUTE,
@@ -44,6 +45,7 @@ def audit_denial(request: Request, reason: str, actor: str | None = None) -> Non
 class OperatorPrincipal:
     id: str
     permissions: frozenset[str]
+    tenant_key: str | None = None
 
     @property
     def actor(self) -> str:
@@ -60,11 +62,29 @@ def _valid_key(value: object) -> bool:
     )
 
 
+def _valid_tenant_key(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and TENANT_KEY_PATTERN.fullmatch(value) is not None
+    )
+
+
 def _valid_channel(value: object) -> bool:
     return (
         isinstance(value, str)
         and re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,49}", value) is not None
     )
+
+
+def load_inbound_tenant_key() -> str | None:
+    tenant_key = os.getenv("AGENT_INBOUND_TENANT_KEY", "")
+    if not tenant_key:
+        return None
+    if not _valid_tenant_key(tenant_key):
+        raise RuntimeError(
+            "AGENT_INBOUND_TENANT_KEY must be a canonical tenant key"
+        )
+    return tenant_key
 
 
 def load_inbound_source() -> str:
@@ -95,7 +115,7 @@ def _load_legacy_inbound_keys() -> list[str]:
     return inbound_keys
 
 
-def _load_channel_bound_inbound_credentials() -> tuple[tuple[bytes, str], ...]:
+def _load_channel_bound_inbound_credentials() -> tuple[tuple, ...]:
     configured = os.getenv("AGENT_INBOUND_CREDENTIALS", "")
     if not configured:
         return ()
@@ -103,6 +123,7 @@ def _load_channel_bound_inbound_credentials() -> tuple[tuple[bytes, str], ...]:
         os.getenv("AGENT_INBOUND_API_KEY", "")
         or os.getenv("AGENT_INBOUND_API_KEYS", "")
         or os.getenv("AGENT_INBOUND_SOURCE", "")
+        or os.getenv("AGENT_INBOUND_TENANT_KEY", "")
     ):
         raise RuntimeError(
             "Configure either AGENT_INBOUND_CREDENTIALS or legacy inbound settings"
@@ -122,14 +143,24 @@ def _load_channel_bound_inbound_credentials() -> tuple[tuple[bytes, str], ...]:
     for entry in entries:
         if (
             not isinstance(entry, dict)
-            or set(entry) not in ({"source", "key"}, {"source", "keys"})
+            or set(entry) not in (
+                {"source", "key"},
+                {"source", "keys"},
+                {"source", "key", "tenant_key"},
+                {"source", "keys", "tenant_key"},
+            )
         ):
             raise RuntimeError("Each inbound channel requires source and key or keys")
         source = entry["source"]
         keys = entry.get("keys", [entry.get("key")])
+        tenant_key = entry.get("tenant_key")
         if not _valid_channel(source) or source in sources:
             raise RuntimeError(
                 "Inbound channel sources must be unique normalized identifiers"
+            )
+        if tenant_key is not None and not _valid_tenant_key(tenant_key):
+            raise RuntimeError(
+                "Inbound tenant_key must be a canonical tenant key"
             )
         if (
             not isinstance(keys, list)
@@ -143,7 +174,10 @@ def _load_channel_bound_inbound_credentials() -> tuple[tuple[bytes, str], ...]:
             if any(hmac.compare_digest(digest, existing) for existing in digests):
                 raise RuntimeError("Inbound API keys must differ")
             digests.append(digest)
-            credentials.append((digest, source))
+            if tenant_key is None:
+                credentials.append((digest, source))
+            else:
+                credentials.append((digest, source, tenant_key))
     return tuple(credentials)
 
 
@@ -174,7 +208,8 @@ def load_credentials() -> tuple[tuple[bytes, ...], tuple[tuple[bytes, OperatorPr
     inbound_digests = tuple(digests)
 
     channel_credentials = _load_channel_bound_inbound_credentials() if channel_bound else ()
-    for digest, _source in channel_credentials:
+    for binding in channel_credentials:
+        digest = binding[0]
         if any(hmac.compare_digest(digest, existing) for existing in digests):
             raise RuntimeError("Inbound API keys must differ")
         digests.append(digest)
@@ -185,18 +220,25 @@ def load_credentials() -> tuple[tuple[bytes, ...], tuple[tuple[bytes, OperatorPr
             or set(entry) not in (
                 {"id", "key", "permissions"},
                 {"id", "keys", "permissions"},
+                {"id", "key", "permissions", "tenant_key"},
+                {"id", "keys", "permissions", "tenant_key"},
             )
         ):
             raise RuntimeError("Each operator requires id, key or keys, and permissions")
         operator_id = entry["id"]
         keys = entry.get("keys", [entry.get("key")])
         permissions = entry["permissions"]
+        tenant_key = entry.get("tenant_key")
         if (
             not isinstance(operator_id, str)
             or re.fullmatch(r"[a-zA-Z][a-zA-Z0-9._-]{0,63}", operator_id) is None
             or operator_id in ids
         ):
             raise RuntimeError("Operator IDs must be unique, stable identifiers")
+        if tenant_key is not None and not _valid_tenant_key(tenant_key):
+            raise RuntimeError(
+                "Operator tenant_key must be a canonical tenant key"
+            )
         if (
             not isinstance(keys, list)
             or not 1 <= len(keys) <= 2
@@ -216,7 +258,11 @@ def load_credentials() -> tuple[tuple[bytes, ...], tuple[tuple[bytes, OperatorPr
             raise RuntimeError("Operator permissions must be unique known permissions")
 
         ids.add(operator_id)
-        principal = OperatorPrincipal(operator_id, frozenset(permissions))
+        principal = OperatorPrincipal(
+            operator_id,
+            frozenset(permissions),
+            tenant_key,
+        )
         for key in keys:
             digest = _key_digest(key)
             if any(hmac.compare_digest(digest, existing) for existing in digests):
@@ -230,6 +276,11 @@ def load_credentials() -> tuple[tuple[bytes, ...], tuple[tuple[bytes, OperatorPr
 _INBOUND_DIGESTS, _OPERATORS = load_credentials()
 _CHANNEL_INBOUND_CREDENTIALS = _load_channel_bound_inbound_credentials()
 _INBOUND_SOURCE = load_inbound_source() if not _CHANNEL_INBOUND_CREDENTIALS else None
+_INBOUND_TENANT_KEY = (
+    load_inbound_tenant_key()
+    if not _CHANNEL_INBOUND_CREDENTIALS
+    else None
+)
 _INBOUND_RATE_LIMIT = load_rate_limit(
     "AGENT_INBOUND_RATE_LIMIT_PER_MINUTE",
     DEFAULT_INBOUND_RATE_LIMIT_PER_MINUTE,
@@ -240,6 +291,12 @@ _OPERATOR_RATE_LIMIT = load_rate_limit(
 )
 _INBOUND_LIMITER = RollingWindowRateLimiter(_INBOUND_RATE_LIMIT)
 _OPERATOR_LIMITER = RollingWindowRateLimiter(_OPERATOR_RATE_LIMIT)
+
+
+def _set_request_tenant_context(request, tenant_key):
+    state = getattr(request, "state", None)
+    if state is not None:
+        state.tenant_key = tenant_key
 
 
 def _enforce_rate_limit(request, limiter, identity):
@@ -257,21 +314,30 @@ def _enforce_rate_limit(request, limiter, identity):
 def _authenticate_inbound(request: Request, key: str | None) -> str:
     digest = _key_digest(key) if key else None
     source = None
+    tenant_key = None
 
     if digest is not None:
-        for candidate_digest, candidate_source in _CHANNEL_INBOUND_CREDENTIALS:
+        for binding in _CHANNEL_INBOUND_CREDENTIALS:
+            candidate_digest = binding[0]
+            candidate_source = binding[1]
+            candidate_tenant_key = (
+                binding[2] if len(binding) == 3 else None
+            )
             if hmac.compare_digest(digest, candidate_digest):
                 source = candidate_source
+                tenant_key = candidate_tenant_key
 
         if source is None and any(
             hmac.compare_digest(digest, candidate) for candidate in _INBOUND_DIGESTS
         ):
             source = _INBOUND_SOURCE
+            tenant_key = _INBOUND_TENANT_KEY
 
     if source is None:
         audit_denial(request, "invalid_inbound_credential")
         raise HTTPException(status_code=401, detail="Invalid API credentials")
 
+    _set_request_tenant_context(request, tenant_key)
     identity = f"channel:{source}"
     _enforce_rate_limit(request, _INBOUND_LIMITER, identity)
     return source
@@ -334,6 +400,10 @@ def require_operator_permission(permission: str):
         if permission not in operator.permissions:
             audit_denial(request, "operator_permission_denied", operator.actor)
             raise HTTPException(status_code=403, detail="Operator permission denied")
+        _set_request_tenant_context(
+            request,
+            operator.tenant_key,
+        )
         _enforce_rate_limit(request, _OPERATOR_LIMITER, operator.actor)
         return operator
 
