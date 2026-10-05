@@ -192,7 +192,7 @@ def get_inbound_message(message_id, *, tenant_id=None):
                 """,
                 (message_id, tenant_id, tenant_id),
             )
-            return linked
+            return cur.fetchone()
 
 
 def link_inbound_message_to_request(message_id, request_id, *, tenant_id=None):
@@ -250,4 +250,3 @@ def link_inbound_message_to_request(message_id, request_id, *, tenant_id=None):
                     "Inbound message and request tenant ownership differ"
                 )
             return linked
-            return cur.fetchone()
