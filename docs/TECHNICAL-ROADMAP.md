@@ -401,16 +401,25 @@ Completed human intervention queue:
 - writes require operator `decide`; reads require `read`
 - no exception resolution, delivery-state mutation, notification send, dispatch, or external action is introduced
 
+Completed service completion confirmation:
+
+- explicit human-controlled `in_progress` -> `completed` transition implemented and CI-verified in PR #56
+- completion requires operator `decide` and explicit human reason
+- completion is blocked while any linked intervention remains `open`
+- acknowledged interventions do not erase historical exception/intervention evidence
+- exact retries are idempotent; conflicting completion evidence fails closed
+- delivery-status retrieval reports persisted exception history truthfully
+- higher-level request status remains `actioned`
+- no completion notification or external action is performed
+
 Current bounded work:
 
-- add explicit human-controlled delivery completion from `in_progress` to `completed`
-- require explicit completion reason and operator authority
-- block completion while any linked human intervention remains `open`
-- allow completion after intervention acknowledgement without erasing historical exception/intervention evidence
-- make exact completion retries idempotent; conflicting completion evidence fails closed
-- make delivery-status retrieval report persisted exception history truthfully
-- keep the request workflow status unchanged as `actioned`
-- do not send completion notifications or perform external actions in this slice
+- expose a deterministic read-only Phase 6 delivery timeline reconstructed from append-only audit events
+- include every current `delivery_*` and `human_intervention_*` event in stable order
+- preserve original event ID, actor, correlation ID, details, and timestamp
+- label known lifecycle stages without hiding future delivery event types
+- provide summary flags for completion, exceptions, and interventions
+- require operator `read` only; introduce no write or execution authority
 
 Routing roadmap:
 
@@ -453,15 +462,15 @@ Completed:
 - Delivery execution status tracking: `scheduled` → `in_progress` — PR #53
 - Immutable delay and service-issue recording against active delivery — PR #54
 - Human intervention queue creation and acknowledgement — PR #55
+- Human-controlled service completion confirmation: `in_progress` → `completed` — PR #56
 
 Current bounded work:
 
-- Human-controlled service completion confirmation: `in_progress` → `completed`
+- Complete read-only Phase 6 delivery event history
 
-Planned next:
+Deferred messaging-dependent work:
 
 - Notification destination resolution and delivery authorization
-- Complete event history
 
 ## Phase 7 — Closure and learning
 

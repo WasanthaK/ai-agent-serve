@@ -852,6 +852,42 @@ class RouteAuthorizationTests(unittest.TestCase):
                 "operator:wasantha",
             )
 
+    def test_delivery_timeline_requires_read_permission(self):
+        result = {
+            "request_id": str(self.request_id),
+            "event_count": 0,
+            "latest_stage": None,
+            "delivery_completed": False,
+            "has_exceptions": False,
+            "has_interventions": False,
+            "timeline": [],
+        }
+
+        with (
+            patch.object(
+                api,
+                "get_request",
+                return_value={"id": self.request_id},
+            ),
+            patch.object(
+                api,
+                "get_delivery_timeline",
+                return_value=result,
+            ) as timeline,
+        ):
+            denied = self.client.get(
+                f"/requests/{self.request_id}/delivery-timeline",
+            )
+            self.assertEqual(denied.status_code, 401)
+            timeline.assert_not_called()
+
+            allowed = self.client.get(
+                f"/requests/{self.request_id}/delivery-timeline",
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            timeline.assert_called_once_with(self.request_id)
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)

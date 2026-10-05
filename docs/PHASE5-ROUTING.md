@@ -587,6 +587,40 @@ This slice does not:
 - dispatch work; or
 - perform any external action.
 
+## Complete delivery event history
+
+The delivery timeline is a read-only projection over the existing append-only `agent_events` audit log.
+
+`GET /requests/{request_id}/delivery-timeline` requires operator `read` and returns only Phase 6 delivery events whose types begin with:
+
+- `delivery_`; or
+- `human_intervention_`.
+
+Each timeline item preserves:
+
+- stable sequence within the returned timeline;
+- original event ID;
+- event type;
+- mapped lifecycle stage for known current events;
+- actor;
+- original event details;
+- correlation ID; and
+- creation timestamp.
+
+Unknown future delivery/intervention event types are not dropped. They remain visible with a generic `delivery` stage and `known_event_type = false`.
+
+The timeline also reports deterministic summary facts:
+
+- event count;
+- latest stage;
+- whether delivery completion exists;
+- whether exception history exists; and
+- whether intervention history exists.
+
+Raw event retrieval is ordered by `created_at, id` so equal timestamps still produce stable repeated reads.
+
+This capability is read-only. It creates no state transition, authority, notification, dispatch, or external action.
+
 ## Current exclusions
 
 This routing stage does not yet include:
@@ -662,3 +696,6 @@ The Phase 6 human-intervention PostgreSQL proof creates one intervention from a 
 
 
 The Phase 6 service-completion PostgreSQL proof first verifies completion is rejected while an intervention remains open, then acknowledges the intervention, completes the delivery exactly once, preserves retry identity, reports exception history truthfully, leaves request status `actioned`, and proves no notification side effect.
+
+
+The Phase 6 complete-event-history PostgreSQL proof reconstructs the current full delivery lifecycle from handoff through completion, including notification preparation, appointment events, execution status, multiple exceptions, intervention creation/acknowledgement, and completion. It verifies contiguous timeline sequence, summary flags, and preservation of event identity/details without introducing any write authority.
