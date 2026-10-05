@@ -1,232 +1,216 @@
 # Agent Architecture
 
+> **Current target architecture.** The original Phase 1–3 runtime was a standalone
+> request/workflow prototype. That implementation remains valuable and is still
+> present, but it no longer defines product ownership.
+>
+> Canonical product-family boundary: `docs/AGENT-QUOTES-BOUNDARY.md`.
+
 ## Design principle
 
-The Mac Mini is a lightweight, always-on orchestration node. It receives requests, coordinates AI analysis, maintains workflow state, invokes approved tools and records every significant event.
+The Expert Agent Platform is an independently deployable intelligence service for
+the Quixo product family.
 
-Large-model inference remains external and can be provided by a cloud model or, later, a separate GPU workstation.
+It provides domain expertise, structured reasoning, clarification, safety/context
+analysis, proposal intelligence, provenance and controlled learning.
 
-## System architecture
+It does not become SendQuote, RequestQuote, Marketplace, Messaging or a future Task
+Scheduler.
 
-```text
-Website / App / Messaging Channel
-                |
-                v
-      POST /webhook/quote-request
-                |
-                v
-        FastAPI Agent Server
-                |
-                v
-       Structured AI analysis
-                |
-       +--------+---------+
-       |                  |
-       v                  v
-Missing information   Human review
-       |                  |
-       v                  v
-Follow-up draft      Approve / reject
-       |                  |
-       v                  |
-Customer reply            |
-       |                  |
-       +--------+---------+
-                |
-                v
-          Reanalysis
-                |
-                v
-      PostgreSQL state + events
-                |
-                v
-        Controlled tool layer
-```
+Large-model inference may be cloud-hosted or provided by separate local/GPU
+infrastructure without changing product contracts.
 
-## Structured analysis
-
-The model returns strict JSON rather than unstructured prose. Current fields are:
-
-- `intent`
-- `category`
-- `summary`
-- `urgency`
-- `next_action`
-- `needs_human_review`
-- `missing_information`
-- `follow_up_questions`
-
-The application uses these fields to calculate workflow status and determine which actions are permitted.
-
-## Workflow states
-
-### `needs_information`
-
-Essential information is missing. The agent can prepare a customer follow-up draft.
-
-### `awaiting_human_review`
-
-The request is urgent, dangerous, high-value, legally sensitive or unusual. A human must approve or reject it.
-
-### `ready`
-
-The agent has enough information and no mandatory human review is required.
-
-### `approved`
-
-A human approved a request that required review.
-
-### `rejected`
-
-A human rejected the request. Further workflow tools are blocked.
-
-### `actioned`
-
-Reserved for a future external action that completed successfully.
-
-## Status selection
-
-Status is derived in this order:
-
-1. If essential information is missing, use `needs_information`.
-2. Otherwise, if human review is required, use `awaiting_human_review`.
-3. Otherwise, use `ready`.
-
-This allows missing information to be collected before a later escalation decision.
-
-## Persistent conversation
-
-The initial customer request remains in `agent_requests.message`. Later replies are stored separately in `agent_messages`.
-
-During reanalysis, the server combines the original request with all stored replies in chronological order. The model analyses the complete conversation and should not ask again for information already supplied.
-
-## Human in the loop
-
-Requests in `awaiting_human_review` can be approved through:
+## Target topology
 
 ```text
-POST /requests/{request_id}/approve
+       Web / Widget / Email / WhatsApp / Voice / API
+                         |
+              +----------+----------+
+              |                     |
+              v                     v
+         RequestQuote           SendQuote
+              ^                     ^
+              |                     |
+          Marketplace               |
+              ^                     |
+              |                     |
+              +----------+----------+
+                         |
+                         v
+               Expert Agent Platform
+
+Marketplace -> RequestQuote for sourcing/request flow.
+Marketplace, RequestQuote and SendQuote all consume Expert Agent intelligence.
+Connectors may call the Expert Agent before a canonical product record exists.
+
+Future Task Scheduler/Workforce is a separate product/project and may consume the
+same Expert Agent through versioned contracts.
 ```
 
-Active requests can be rejected through:
+## Invocation modes
+
+### Pre-record intelligence
+
+The agent can interpret conversational/connector input before a canonical
+ServiceRequest or Quotation exists.
+
+This is important for voice, widget, email and WhatsApp intake.
+
+### Post-record intelligence
+
+A Quixo product can provide a stable external reference plus the minimum authorised
+context for deeper expert analysis, clarification or proposal preparation.
+
+The agent never acquires ownership of that external record.
+
+## Expert outputs
+
+### Requirement Intelligence Package
+
+Price-neutral request-side intelligence for customer/buyer intake.
+
+### Commercial Proposal Package
+
+Provider-side proposal intelligence for SendQuote/provider review.
+
+Both are strict, versioned schemas and distinguish facts, inference, assumptions,
+estimates, unknowns and safety-critical uncertainty.
+
+## Workflow state
+
+Agent workflow state is **analysis/orchestration state only**.
+
+States such as:
+
+- `needs_information`
+- `awaiting_human_review`
+- `ready`
+- legacy `approved/rejected/actioned` prototype states
+
+must not be interpreted as authoritative Quixo business state.
+
+SendQuote/RequestQuote/Marketplace remain authoritative for their own lifecycle
+states.
+
+## Messaging and conversation evidence
+
+Quixo Messaging/product connectors are the authoritative business communication
+systems.
+
+Legacy `agent_messages`, inbound persistence and conversation replay remain useful
+for prototype compatibility, retry/reanalysis and learning evidence, but must not
+become a second canonical conversation ledger.
+
+Future integration should prefer stable message/conversation references plus only
+the bounded content needed for reproducible agent analysis.
+
+## Human authority
+
+The existing Quixo rule remains non-negotiable:
+
+**AI suggests; humans decide.**
+
+The Expert Agent may interpret, structure, compare and recommend within policy. It
+does not autonomously finalize prices, send quotes, select commercial winners,
+award procurement or change another product's state without an explicitly
+authorised deterministic action.
+
+## Controlled tools
+
+Agent tools remain explicit, state-aware and auditable.
+
+A tool can call an external Quixo API only when:
+
+- the contract is versioned
+- the caller/acting context is authenticated
+- the tool has explicit authority
+- idempotency/correlation are defined
+- the action is allowed in both agent policy and the owning product
+- required human approval is present
+
+No tool may bypass product APIs through direct database access.
+
+## Agent persistence
+
+The agent database owns only agent concerns:
+
+- analysis/provenance
+- skill/model versions
+- evaluations
+- regression/promotion evidence
+- correlation
+- bounded retry/recovery
+- agent audit/telemetry
+- temporary/prototype compatibility data during migration
+
+It does not own provider, RFQ, quotation, marketplace, messaging or workforce
+transactional truth.
+
+## Existing runtime API
+
+The current FastAPI endpoints and persistence model remain compatibility surfaces
+from the standalone prototype. They should be migrated incrementally rather than
+deleted in one change.
+
+The existing endpoints include direct analysis, request/reanalysis, operator review
+and tool execution. New product integrations should prefer versioned expert
+contracts rather than extending the prototype request API into a new Quixo system
+of record.
+
+## Failure isolation
+
+The safe-distance architecture requires:
+
+- Quixo products remain transactionally correct if the Expert Agent is unavailable
+- degraded/manual product paths exist where appropriate
+- agent failure cannot corrupt product state
+- product failures do not corrupt skill/evaluation history
+- retries are bounded/idempotent
+- each side can deploy and roll back independently
+
+## Learning architecture
 
 ```text
-POST /requests/{request_id}/reject
+real requirement
+ -> expert analysis
+ -> human/provider correction
+ -> product outcome evidence
+ -> human evaluation
+ -> improvement proposal
+ -> regression
+ -> human-controlled promotion
+ -> new skill version
 ```
 
-Invalid transitions return HTTP `409 Conflict`.
+Production behaviour must never change solely because of unreviewed model output.
 
-## Controlled tool layer
+## Context intelligence
 
-Tools are registered explicitly in `tools.py`. The current registry contains:
+Domain skills may consume external evidence such as weather, wind, humidity, heat,
+flood/fire warnings, tides, daylight or access conditions.
 
-```text
-prepare_customer_follow_up
-```
+The agent interprets that evidence. Deterministic policy decides whether it is
+informational, review-required, rescheduling-recommended or safety-escalated.
 
-This tool:
+The agent does not silently alter another product's schedule or commercial
+commitment.
 
-- Runs only when status is `needs_information`
-- Uses stored follow-up questions
-- Produces a customer-friendly draft
-- Marks the result as `draft_only`
-- Does not send anything externally
+## Future separate products
 
-A tool absent from the registry cannot execute. A registered tool also cannot execute from an unauthorised workflow state.
+Task Scheduler / Workforce / Service Delivery will be separate products/projects.
 
-## Audit events
+The Expert Agent can provide those products with domain intelligence such as:
 
-Important activity is appended to `agent_events`. Current event types include:
+- job requirements
+- required skills/certifications
+- likely duration/risk
+- environmental constraints
+- execution-readiness advice
 
-- `request_created`
-- `customer_message_received`
-- `request_reanalysed`
-- `request_approved`
-- `request_rejected`
-- `tool_started`
-- `tool_completed`
-- `tool_failed`
-- `reanalysis_failed`
-
-Each event records an event UUID, request UUID, event type, actor, JSON details and creation timestamp.
-
-## Database model
-
-### `agent_requests`
-
-Stores the original request, current analysis and current workflow state.
-
-### `agent_messages`
-
-Stores later conversation messages linked to the request.
-
-### `agent_events`
-
-Stores an append-only history of workflow decisions and tool activity.
-
-## API endpoints
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/` | Health and version |
-| `POST` | `/agent` | Direct structured analysis |
-| `POST` | `/webhook/quote-request` | Create and analyse a request |
-| `GET` | `/requests/{request_id}` | Retrieve current state |
-| `GET` | `/requests/{request_id}/messages` | Retrieve conversation history |
-| `GET` | `/requests/{request_id}/events` | Retrieve audit history |
-| `POST` | `/requests/{request_id}/reply` | Save a reply and reanalyse |
-| `POST` | `/requests/{request_id}/approve` | Approve a reviewed request |
-| `POST` | `/requests/{request_id}/reject` | Reject an active request |
-| `POST` | `/requests/{request_id}/tools/{tool_name}` | Execute an allowed tool |
-
-## Failure handling
-
-A customer reply is stored before AI reanalysis begins. If the model call fails:
-
-- The customer message remains stored.
-- A `reanalysis_failed` event is recorded.
-- The endpoint returns HTTP `502`.
-- Reanalysis can be retried without losing the reply.
-
-Tool failures similarly create a `tool_failed` event.
-
-## Deployment
-
-The Docker Compose deployment includes:
-
-- FastAPI and Uvicorn
-- PostgreSQL 16
-- Container health checks
-- Persistent PostgreSQL storage
-- Memory limits suitable for the Mac Mini
-
-Database changes are stored as versioned SQL migrations in `migrations/`.
-
-## Security boundary
-
-The current system is suitable for local development and controlled testing. Before public exposure it requires:
-
-- Webhook authentication
-- API authentication and authorisation
-- Secret rotation
-- HTTPS through a reverse proxy or secure tunnel
-- Rate limiting
-- Request-size controls
-- Restricted network exposure
-- Production logging and monitoring
+but does not own staff, schedules, tasks, shifts or workforce execution state.
 
 ## Verification
 
-The end-to-end Phase 3 smoke test is:
-
-```bash
-python3 tests/smoke_phase3.py
-```
-
-It verifies the controlled workflow, conversation loop, tool restrictions, safety escalation, approvals, persistence and audit history.
-
-## Future integrations
-
-The controlled tool layer can later support Quixo operations, email and messaging adapters, WhatsApp, CRM actions, scheduling, MCP servers, external APIs and separate GPU-based local inference.
-
-Every future tool should remain registered, state-aware, auditable and restricted according to its risk.
+Existing Phase 3/4 tests continue to protect the current runtime during migration.
+New product integrations must additionally use contract tests on both sides of each
+versioned boundary.
