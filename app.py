@@ -179,6 +179,14 @@ from review_request import (
     get_review_request,
     prepare_review_request,
 )
+from closure_escalation import (
+    ClosureEscalationConflictError,
+    ClosureEscalationNotFoundError,
+    ClosureEscalationStateError,
+    ClosureEscalationValidationError,
+    create_closure_escalation,
+    get_closure_escalations,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -322,6 +330,13 @@ class SatisfactionResponseInput(BaseModel):
 class ReviewRequestInput(BaseModel):
     satisfaction_follow_up_id: UUID
     reason: str = Field(min_length=1, max_length=2000)
+
+
+class ClosureEscalationInput(BaseModel):
+    satisfaction_follow_up_id: UUID
+    escalation_kind: str = Field(min_length=1, max_length=20)
+    priority: str = Field(min_length=1, max_length=20)
+    reason: str = Field(min_length=1, max_length=4000)
 
 
 class CustomerReply(BaseModel):
@@ -641,6 +656,46 @@ def record_request_satisfaction_response(
     except (
         SatisfactionFollowUpStateError,
         SatisfactionFollowUpConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/closure-escalations",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_closure_escalations(request_id: UUID):
+    try:
+        return {
+            "request_id": str(request_id),
+            "escalations": get_closure_escalations(request_id),
+        }
+    except ClosureEscalationValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/requests/{request_id}/closure-escalations")
+def create_request_closure_escalation(
+    request_id: UUID,
+    payload: ClosureEscalationInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return create_closure_escalation(
+            request_id,
+            payload.satisfaction_follow_up_id,
+            payload.escalation_kind,
+            priority=payload.priority,
+            reason=payload.reason,
+            actor=operator.actor,
+        )
+    except ClosureEscalationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ClosureEscalationValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        ClosureEscalationStateError,
+        ClosureEscalationConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 

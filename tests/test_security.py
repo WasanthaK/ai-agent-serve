@@ -1020,6 +1020,58 @@ class RouteAuthorizationTests(unittest.TestCase):
             self.assertEqual(allowed.status_code, 200)
             retrieve.assert_called_once_with(self.request_id)
 
+    def test_closure_escalation_permissions(self):
+        follow_up_id = uuid4()
+        escalation_id = uuid4()
+        payload = {
+            "satisfaction_follow_up_id": str(follow_up_id),
+            "escalation_kind": "complaint",
+            "priority": "high",
+            "reason": "Customer complaint requires review",
+        }
+        result = {
+            "escalation_id": str(escalation_id),
+            "request_id": str(self.request_id),
+            "status": "open",
+            "escalation_kind": "complaint",
+        }
+
+        with patch.object(
+            api,
+            "create_closure_escalation",
+            return_value=result,
+        ) as create:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/closure-escalations",
+                json=payload,
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            create.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/closure-escalations",
+                json=payload,
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                create.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
+        with patch.object(
+            api,
+            "get_closure_escalations",
+            return_value=[result],
+        ) as retrieve:
+            allowed = self.client.get(
+                f"/requests/{self.request_id}/closure-escalations",
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            retrieve.assert_called_once_with(self.request_id)
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)

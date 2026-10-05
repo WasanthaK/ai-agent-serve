@@ -108,3 +108,40 @@ This slice does not:
 - perform any external action.
 
 The PostgreSQL lifecycle proof intentionally uses a 1/5 satisfaction rating and still prepares the review request, proving the workflow is not rating-gated.
+
+
+## Complaint and rework escalation foundation
+
+Recorded satisfaction evidence may be escalated into explicit human-owned closure cases.
+
+Supported escalation kinds are deliberately limited to:
+
+- `complaint`;
+- `rework`.
+
+Each request may have at most one escalation of each kind.
+
+Creation requires:
+
+- the same request to remain `actioned`;
+- the exact satisfaction follow-up in `responded` state;
+- explicit priority: `normal`, `high`, or `urgent`;
+- an explicit human-authored reason; and
+- operator `decide`.
+
+Escalation is **not automatically inferred from satisfaction rating**. A low rating is evidence only. The operator decides whether a complaint or rework case should exist.
+
+A rework escalation does not reopen the completed delivery and does not authorize or dispatch new service work.
+
+Exact retries return the existing same-kind escalation. Conflicting evidence for an existing kind fails closed.
+
+The audit event explicitly records:
+
+- the observed satisfaction rating;
+- `auto_triggered = false`;
+- `delivery_reopened = false`;
+- `rework_dispatched = false`;
+- `notification_sent = false`; and
+- `external_action_performed = false`.
+
+The PostgreSQL lifecycle proof creates both complaint and rework escalations from the same 1/5 satisfaction evidence, preserves completed delivery and actioned request state, and proves that neither escalation dispatches or reopens work.

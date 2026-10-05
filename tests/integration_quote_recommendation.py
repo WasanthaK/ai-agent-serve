@@ -66,6 +66,10 @@ from review_request import (
     get_review_request,
     prepare_review_request,
 )
+from closure_escalation import (
+    create_closure_escalation,
+    get_closure_escalations,
+)
 
 
 def ready_analysis():
@@ -957,6 +961,87 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         self.assertFalse(
             review_events[0]["details"]["external_action_performed"]
         )
+
+        complaint = create_closure_escalation(
+            request_id,
+            UUID(follow_up["follow_up_id"]),
+            "complaint",
+            priority="high",
+            reason="Customer reported service quality concerns.",
+            actor="operator:ci",
+        )
+        complaint_retry = create_closure_escalation(
+            request_id,
+            UUID(follow_up["follow_up_id"]),
+            "complaint",
+            priority="high",
+            reason="Customer reported service quality concerns.",
+            actor="operator:ci",
+        )
+        rework = create_closure_escalation(
+            request_id,
+            UUID(follow_up["follow_up_id"]),
+            "rework",
+            priority="normal",
+            reason="Operator wants rework reviewed before any new work is authorized.",
+            actor="operator:ci",
+        )
+        rework_retry = create_closure_escalation(
+            request_id,
+            UUID(follow_up["follow_up_id"]),
+            "rework",
+            priority="normal",
+            reason="Operator wants rework reviewed before any new work is authorized.",
+            actor="operator:ci",
+        )
+
+        self.assertEqual(
+            complaint_retry["escalation_id"],
+            complaint["escalation_id"],
+        )
+        self.assertEqual(
+            rework_retry["escalation_id"],
+            rework["escalation_id"],
+        )
+        self.assertEqual(complaint["status"], "open")
+        self.assertEqual(rework["status"], "open")
+        self.assertEqual(complaint["escalation_kind"], "complaint")
+        self.assertEqual(rework["escalation_kind"], "rework")
+
+        for escalation in (complaint, rework):
+            self.assertFalse(escalation["auto_triggered"])
+            self.assertFalse(escalation["delivery_reopened"])
+            self.assertFalse(escalation["rework_dispatched"])
+            self.assertFalse(escalation["notification_sent"])
+            self.assertFalse(escalation["external_action_performed"])
+
+        persisted_escalations = get_closure_escalations(request_id)
+        self.assertEqual(
+            [item["escalation_kind"] for item in persisted_escalations],
+            ["complaint", "rework"],
+        )
+        self.assertEqual(get_request(request_id)["status"], "actioned")
+        self.assertEqual(get_delivery_status(request_id)["status"], "completed")
+
+        escalation_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"] == "closure_escalation_created"
+        ]
+        self.assertEqual(len(escalation_events), 2)
+        self.assertEqual(
+            [event["details"]["escalation_kind"] for event in escalation_events],
+            ["complaint", "rework"],
+        )
+        for event in escalation_events:
+            self.assertEqual(event["details"]["satisfaction_rating"], 1)
+            self.assertFalse(event["details"]["auto_triggered"])
+            self.assertFalse(event["details"]["delivery_reopened"])
+            self.assertFalse(event["details"]["rework_dispatched"])
+            self.assertFalse(event["details"]["notification_sent"])
+            self.assertFalse(
+                event["details"]["external_action_performed"]
+            )
 
 
 if __name__ == "__main__":
