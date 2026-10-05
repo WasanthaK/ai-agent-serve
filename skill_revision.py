@@ -175,8 +175,8 @@ def create_skill_improvement_revision(
                 FROM service_skill_improvement_revisions
                 WHERE proposal_id = %s
                 ORDER BY revision_number DESC
-                LIMIT 1
                 FOR UPDATE
+                LIMIT 1
                 """,
                 (proposal_id,),
             )
