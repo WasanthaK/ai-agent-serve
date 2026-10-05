@@ -171,6 +171,14 @@ from satisfaction_follow_up import (
     prepare_satisfaction_follow_up,
     record_satisfaction_response,
 )
+from review_request import (
+    ReviewRequestConflictError,
+    ReviewRequestNotFoundError,
+    ReviewRequestStateError,
+    ReviewRequestValidationError,
+    get_review_request,
+    prepare_review_request,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -309,6 +317,11 @@ class SatisfactionResponseInput(BaseModel):
     responded_at: datetime
     response_source: str = Field(min_length=1, max_length=100)
     comment: Optional[str] = Field(default=None, max_length=4000)
+
+
+class ReviewRequestInput(BaseModel):
+    satisfaction_follow_up_id: UUID
+    reason: str = Field(min_length=1, max_length=2000)
 
 
 class CustomerReply(BaseModel):
@@ -628,6 +641,48 @@ def record_request_satisfaction_response(
     except (
         SatisfactionFollowUpStateError,
         SatisfactionFollowUpConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/review-request",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_review_request(request_id: UUID):
+    try:
+        review_request = get_review_request(request_id)
+    except ReviewRequestValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if review_request is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Review request not found",
+        )
+    return review_request
+
+
+@app.post("/requests/{request_id}/review-request")
+def prepare_request_review_request(
+    request_id: UUID,
+    payload: ReviewRequestInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return prepare_review_request(
+            request_id,
+            payload.satisfaction_follow_up_id,
+            reason=payload.reason,
+            actor=operator.actor,
+        )
+    except ReviewRequestNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ReviewRequestValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        ReviewRequestStateError,
+        ReviewRequestConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
