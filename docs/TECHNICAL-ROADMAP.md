@@ -154,11 +154,14 @@ Completed slices:
 - website normalized inbound persistence before AI, durable request linkage and completed-retry backfill implemented and CI-verified in PR #27
 - validated website `Idempotency-Key` values are represented only by SHA-256 hashes in durable inbound-message identity; raw keys are not stored there
 
-External enablement remains deliberately separate from software completion:
+External enablement remains deliberately separate from software completion.
 
-- live SendGrid DNS/MX/public webhook enablement remains deferred
-- live Twilio/Quixo WhatsApp end-to-end proof remains deferred
-- no DNS, MX, public endpoint, Twilio sender/webhook, Azure messaging, firewall, tunnel or port-forwarding changes without explicit authorization immediately before the action
+**Architecture re-baseline:** do not finish the deferred direct SendGrid/Twilio production enablement inside `ai-agent-serve`. The existing Phase 4D ingress code remains useful normalization/idempotency evidence, but production channel interaction now integrates through the established Quixo connector/Messaging stack in Phase 8.
+
+- Quixo remains the public email/WhatsApp/widget/marketplace channel boundary
+- the Expert Agent receives normalized interaction turns through versioned internal contracts
+- outbound delivery goes through Quixo Messaging/product authorization, never directly from the agent to SendGrid/Twilio/Meta
+- no DNS, MX, public endpoint, provider webhook, Azure messaging, firewall, tunnel or port-forwarding changes without explicit authorization immediately before the action
 
 Initial adapters:
 
@@ -605,19 +608,19 @@ Completed end-user Training / Skill Improvement console:
 - no business data or credentials are embedded in the public HTML shell
 - no-store/no-referrer/frame-denial and same-origin content-security controls protect the console boundary
 
-Current bounded work:
+Completed controlled skill promotion:
 
-- allow controlled human promotion only from passing latest regression evidence
-- preserve exact proposal/revision/regression provenance in the promotion record
-- deterministically promote the skill to the next minor semantic version
-- preserve the existing base instructions and append only the reviewed amendment
-- require current runtime version and instructions to exactly match the proposal base snapshot
-- activate the promoted version in the live registry only after durable promotion persistence
-- restore durable promotions into a fresh registry at runtime startup
-- build each analysis call from an atomic current skill-contract snapshot and persist the exact versions used
-- expose promotion only to operator `decide`
-- show a distinct promoted state in the Training console
-- keep promotion human-authorized and regression-gated; model output alone must never activate a change
+- human promotion is allowed only from passing latest regression evidence
+- proposal/revision/regression provenance is persisted in the promotion record
+- skills promote deterministically to the next minor semantic version
+- base instructions are preserved and only the reviewed amendment is appended
+- runtime version/instruction drift fails closed
+- durable promotion is persisted before live-registry activation
+- promotions are restored at runtime startup
+- each analysis call snapshots the exact current skill contract/version set
+- promotion requires operator `decide`
+- the Training console exposes a distinct promoted state
+- unreviewed model output cannot activate a production change
 
 Phase 7 completion condition:
 
@@ -659,11 +662,13 @@ identity.
 - use versioned API/event contracts only; no cross-database access or shared ORM entities
 - keep future Task Scheduler/Workforce as a separate product/project
 
-### Phase 8B — Requirement Intelligence Package
+### Phase 8B — Conversational Requirement Intelligence
 
-Define the price-neutral customer/request-side expert contract.
+Define the price-neutral customer/request-side expert contract **and** the channel-neutral conversation-turn contract used to build it progressively.
 
-It must represent:
+The central interaction primitive is a `RequirementConversationTurn`, not a provider webhook. A turn carries normalized message/media/transcript references, caller/product surface, channel/thread correlation, optional canonical Quixo references, acting context and the previous expert package/provenance needed for continuation.
+
+The resulting `Requirement Intelligence Package` must represent:
 
 - facts/customer objective
 - domain/subdomain
@@ -679,8 +684,25 @@ It must represent:
 - readiness to request provider pricing
 - confidence/evidence provenance
 
-It must distinguish fact, inference, assumption, estimate and unknown and must not
-invent provider commercial prices.
+The Expert Agent response also carries a deterministic interaction directive such as:
+
+- `ask_clarification`
+- `ready_for_pricing`
+- `needs_human_review`
+- `inspection_required`
+- `safety_escalation`
+
+and may include a **draft clarification message**. A draft grants no send authority.
+
+Channel policy:
+
+- **Email** — asynchronous and mostly inbound; after explicit tenant/product opt-in, low-risk clarification questions may be auto-sent through Quixo Messaging before quoting. No autonomous price, availability, scope commitment or quote send.
+- **Web widget** — synchronous guided conversation; clarify interactively, show the structured requirement back to the customer, and submit only after confirmation.
+- **WhatsApp** — first-class conversational channel; preserve one thread/request across multiple turns and support text first, then voice/image/document enrichment. Delivery remains through Quixo Messaging and its service-window/template rules.
+- **Marketplace** — interactive customer-side requirement refinement before/within RequestQuote plus provider-side expert assistance for understanding fit and preparing a proposal. Marketplace does not gain quote/award authority from the agent.
+- **Future Messenger/social channels** — reuse the same conversation-turn contract rather than adding channel-specific reasoning.
+
+The package must distinguish fact, authoritative platform fact, inference, assumption, estimate and unknown. It must not invent provider commercial prices.
 
 ### Phase 8C — Commercial Proposal Package
 
@@ -711,7 +733,40 @@ Rules:
 Migrate one embedded AI capability at a time using shadow/compare evidence rather
 than a big-bang replacement.
 
-### Phase 8E — Canonical reference/provenance linking
+### Phase 8E — Channel interaction and Quixo Messaging integration
+
+Replace the unfinished agent-side channel-delivery backlog with product-owned conversational integration.
+
+Rules:
+
+- Quixo connectors/Messaging authenticate channel providers, receive raw events and own delivery
+- the agent never stores a competing business conversation ledger
+- the agent never turns a raw email address/phone number into send authority
+- the agent returns analysis plus a draft response/interaction directive
+- the owning Quixo product resolves the canonical participant/destination and decides whether policy authorizes automatic delivery
+- every automated clarification is auditable, correlated and idempotent
+- commercial commitments remain behind the owning product's existing authority/human controls
+
+Required Quixo-side contract work:
+
+1. **Requirement conversation/thread binding** — bind email/WhatsApp/widget/marketplace turns to the same draft/canonical ServiceRequest so replies refine the existing requirement instead of creating duplicate leads.
+2. **Public/direct pre-quote conversation** — provide a request-level conversation/clarification surface before a Quotation exists. Existing public conversation is quote-linked; governed buyer clarification already exists separately.
+3. **Expert context projection** — expose only the authorised ServiceRequest/product context the agent needs; do not let the agent query Quixo databases.
+4. **Expert evidence attachment** — accept a versioned Requirement Intelligence Package/provenance/readiness assessment without allowing the agent to set commercial/routing authority directly.
+5. **Product-authorized clarification send** — reuse the existing Messaging clients; add only the orchestration/authorization contract needed for Quixo to send an agent-drafted clarification.
+6. **Inbound reply continuation** — preserve email thread identifiers and WhatsApp/customer conversation correlation and feed replies back through the same expert interaction.
+7. **Readiness gate** — keep the lead visible while incomplete, but do not treat it as provider-pricing-ready until deterministic product policy accepts the expert readiness evidence.
+
+Initial migration backlog from current Quixo code:
+
+- replace WhatsApp category/location extraction stubs with Expert Agent intelligence
+- transcribe WhatsApp voice notes before expert interpretation instead of treating the media id as message text
+- progressively replace regex/embedded email interpretation with the same expert contract
+- integrate widget conversational refinement with the same package
+- add Marketplace interactive requirement refinement
+- retain current Messaging email/SMS/WhatsApp send/status/window/template capabilities; do not duplicate them in the agent
+
+### Phase 8F — Canonical reference/provenance linking
 
 Agent evidence may reference authoritative Quixo identifiers without owning their
 state.
@@ -719,7 +774,7 @@ state.
 Examples include ServiceRequest, Quotation and other owning-product identifiers
 where applicable.
 
-### Phase 8F — Outcome feedback into learning
+### Phase 8G — Outcome feedback into learning
 
 Consume factual corrections and outcomes from the owning product.
 
@@ -734,7 +789,7 @@ Priority evidence:
 
 No outcome automatically promotes a skill.
 
-### Phase 8G — Context intelligence
+### Phase 8H — Context intelligence
 
 Add pluggable external context providers selected by domain skill.
 
