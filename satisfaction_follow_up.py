@@ -1,9 +1,11 @@
-"""Preparation-only customer satisfaction follow-up.
+"""Customer satisfaction follow-up preparation and response evidence.
 
-Creates one durable post-completion follow-up record. It does not resolve a
-destination, send a message, ingest a rating, or change delivery/request state.
+Creates one durable post-completion follow-up record and permits one immutable
+operator-recorded satisfaction response. It does not resolve a destination,
+send a message, trigger a review/complaint, or change delivery/request state.
 """
 
+from datetime import datetime, timezone
 import uuid
 
 from psycopg.rows import dict_row
@@ -26,6 +28,10 @@ class SatisfactionFollowUpNotFoundError(LookupError):
 
 
 class SatisfactionFollowUpStateError(RuntimeError):
+    pass
+
+
+class SatisfactionFollowUpConflictError(RuntimeError):
     pass
 
 
@@ -52,6 +58,48 @@ def _normalize_actor(actor):
     return actor
 
 
+def _normalize_response_source(response_source):
+    if not isinstance(response_source, str):
+        raise SatisfactionFollowUpValidationError(
+            "response_source must be text"
+        )
+    response_source = response_source.strip()
+    if not response_source:
+        raise SatisfactionFollowUpValidationError(
+            "response_source is required"
+        )
+    if len(response_source) > 100:
+        raise SatisfactionFollowUpValidationError(
+            "response_source is too long"
+        )
+    return response_source
+
+
+def _normalize_comment(comment):
+    if comment is None:
+        return None
+    if not isinstance(comment, str):
+        raise SatisfactionFollowUpValidationError("comment must be text")
+    comment = comment.strip()
+    if not comment:
+        return None
+    if len(comment) > 4000:
+        raise SatisfactionFollowUpValidationError("comment is too long")
+    return comment
+
+
+def _validate_responded_at(responded_at):
+    if not isinstance(responded_at, datetime) or responded_at.tzinfo is None:
+        raise SatisfactionFollowUpValidationError(
+            "responded_at must be a timezone-aware datetime"
+        )
+    if responded_at > datetime.now(timezone.utc):
+        raise SatisfactionFollowUpValidationError(
+            "responded_at cannot be in the future"
+        )
+    return responded_at
+
+
 def _result(row):
     return {
         "follow_up_id": str(row["id"]),
@@ -67,7 +115,12 @@ def _result(row):
         "status": row["status"],
         "prepared_by": row["prepared_by"],
         "created_at": row["created_at"],
-        "response_recorded": False,
+        "rating": row.get("rating"),
+        "comment": row.get("comment"),
+        "responded_at": row.get("responded_at"),
+        "response_source": row.get("response_source"),
+        "response_recorded_by": row.get("response_recorded_by"),
+        "response_recorded": row["status"] == "responded",
         "sent": False,
         "external_action_performed": False,
     }
@@ -188,3 +241,136 @@ def prepare_satisfaction_follow_up(request_id, *, actor):
             )
 
             return _result(created)
+
+
+def record_satisfaction_response(
+    request_id,
+    follow_up_id,
+    *,
+    rating,
+    responded_at,
+    response_source,
+    comment=None,
+    actor,
+):
+    request_id = _validate_uuid(request_id, "request_id")
+    follow_up_id = _validate_uuid(follow_up_id, "follow_up_id")
+    actor = _normalize_actor(actor)
+
+    if not isinstance(rating, int) or isinstance(rating, bool):
+        raise SatisfactionFollowUpValidationError(
+            "rating must be an integer"
+        )
+    if rating < 1 or rating > 5:
+        raise SatisfactionFollowUpValidationError(
+            "rating must be between 1 and 5"
+        )
+
+    responded_at = _validate_responded_at(responded_at)
+    response_source = _normalize_response_source(response_source)
+    comment = _normalize_comment(comment)
+
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT id, status
+                FROM agent_requests
+                WHERE id = %s
+                FOR UPDATE
+                """,
+                (request_id,),
+            )
+            request = cur.fetchone()
+            if request is None:
+                raise SatisfactionFollowUpNotFoundError("Request not found")
+            if request["status"] != "actioned":
+                raise SatisfactionFollowUpStateError(
+                    "Satisfaction response requires request status actioned"
+                )
+
+            cur.execute(
+                """
+                SELECT *
+                FROM service_satisfaction_followups
+                WHERE request_id = %s
+                  AND id = %s
+                FOR UPDATE
+                """,
+                (request_id, follow_up_id),
+            )
+            follow_up = cur.fetchone()
+            if follow_up is None:
+                raise SatisfactionFollowUpNotFoundError(
+                    "Satisfaction follow-up not found for request"
+                )
+
+            if responded_at < follow_up["created_at"]:
+                raise SatisfactionFollowUpValidationError(
+                    "responded_at cannot predate follow-up creation"
+                )
+
+            if follow_up["status"] == "responded":
+                same = (
+                    follow_up["rating"] == rating
+                    and follow_up["comment"] == comment
+                    and follow_up["responded_at"] == responded_at
+                    and follow_up["response_source"] == response_source
+                    and follow_up["response_recorded_by"] == actor
+                )
+                if same:
+                    return _result(follow_up)
+                raise SatisfactionFollowUpConflictError(
+                    "Satisfaction response is already recorded with different evidence"
+                )
+
+            if follow_up["status"] != "prepared":
+                raise SatisfactionFollowUpStateError(
+                    "Satisfaction follow-up must be prepared before response"
+                )
+
+            cur.execute(
+                """
+                UPDATE service_satisfaction_followups
+                SET status = 'responded',
+                    rating = %s,
+                    comment = %s,
+                    responded_at = %s,
+                    response_source = %s,
+                    response_recorded_by = %s
+                WHERE id = %s
+                RETURNING *
+                """,
+                (
+                    rating,
+                    comment,
+                    responded_at,
+                    response_source,
+                    actor,
+                    follow_up_id,
+                ),
+            )
+            responded = cur.fetchone()
+
+            record_event_in_transaction(
+                cur,
+                request_id=request_id,
+                event_type="customer_satisfaction_response_recorded",
+                actor=actor,
+                details={
+                    "follow_up_id": str(follow_up_id),
+                    "delivery_status_id": str(
+                        responded["delivery_status_id"]
+                    ),
+                    "provider_id": str(responded["provider_id"]),
+                    "rating": rating,
+                    "response_source": response_source,
+                    "comment_present": comment is not None,
+                    "review_request_created": False,
+                    "complaint_created": False,
+                    "rework_created": False,
+                    "external_action_performed": False,
+                },
+            )
+
+            return _result(responded)

@@ -931,6 +931,46 @@ class RouteAuthorizationTests(unittest.TestCase):
             self.assertEqual(allowed.status_code, 200)
             retrieve.assert_called_once_with(self.request_id)
 
+    def test_satisfaction_response_requires_decide_permission(self):
+        follow_up_id = uuid4()
+        payload = {
+            "follow_up_id": str(follow_up_id),
+            "rating": 4,
+            "responded_at": "2026-10-05T05:00:00Z",
+            "response_source": "phone",
+            "comment": "Good service",
+        }
+        result = {
+            "follow_up_id": str(follow_up_id),
+            "request_id": str(self.request_id),
+            "status": "responded",
+            "rating": 4,
+        }
+
+        with patch.object(
+            api,
+            "record_satisfaction_response",
+            return_value=result,
+        ) as record:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/satisfaction-follow-up/response",
+                json=payload,
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            record.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/satisfaction-follow-up/response",
+                json=payload,
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                record.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)
