@@ -857,6 +857,8 @@ def retrieve_training_cases(
             ),
             "promotion_supported": True,
         }
+    except TenantScopeError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except TrainingWorkspaceValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -872,6 +874,8 @@ def retrieve_training_case(
             evaluation_id,
             tenant_id=tenant_id,
         )
+    except TenantScopeError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except TrainingWorkspaceNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except TrainingWorkspaceValidationError as exc:
