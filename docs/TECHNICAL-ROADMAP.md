@@ -491,20 +491,31 @@ Completed satisfaction response ingestion:
 - exact retries are idempotent; conflicting response evidence fails closed
 - no automated review request, complaint, rework, or external action is triggered
 
+Completed public review-request preparation:
+
+- one durable public-review request after satisfaction response implemented and CI-verified in PR #60
+- explicit operator reason and operator `decide` are required
+- preparation is not satisfaction-rating gated
+- review target platform/link remain unresolved
+- outbound destination channel/address remain unresolved
+- exact retries are idempotent; conflicting evidence fails closed
+- no review request is sent and no external action is performed
+
 Current bounded work:
 
-- prepare one durable public-review request only after a satisfaction response exists
+- create human-owned closure escalation records from recorded satisfaction evidence
+- support only `complaint` and `rework` kinds
+- permit at most one escalation of each kind per request
+- require explicit priority: `normal`, `high`, or `urgent`
 - require explicit operator reason and operator `decide`
-- do not gate preparation on satisfaction rating
-- leave review target platform/link unresolved
-- leave outbound destination channel/address unresolved
-- make exact preparation retries idempotent and conflicting evidence fail closed
-- record `public_review_request_prepared` transactionally
-- do not send the review request or perform any external action in this slice
+- do not infer escalation automatically from satisfaction rating
+- do not reopen completed delivery or dispatch rework
+- make exact retries idempotent and conflicting same-kind evidence fail closed
+- record `closure_escalation_created` transactionally
+- do not notify anyone or perform external actions in this slice
 
 Planned next:
 
-- Complaint and rework escalation
 - Outcome measurement
 - Skill evaluation against real cases
 - Controlled improvement of instructions and policies
