@@ -381,16 +381,26 @@ Completed delivery execution status tracking:
 - writes require operator `decide`; reads require `read`
 - no completion, exception, dispatch, calendar, or notification side effects are introduced
 
+Completed delivery exception recording:
+
+- immutable `delay` and `service_issue` evidence implemented and CI-verified in PR #54
+- caller-supplied UUIDs provide retry identity
+- occurrence and optional expected-resolution timestamps are timezone-aware
+- delays are allowed while scheduled/in-progress; service issues require in-progress delivery
+- exact retries are idempotent; conflicting UUID reuse fails closed
+- writes require operator `decide`; reads require `read`
+- no exception resolution, delivery-state mutation, intervention creation, or notification side effect is introduced
+
 Current bounded work:
 
-- record immutable delivery exceptions against an active delivery
-- support explicit `delay` and `service_issue` kinds only
-- require caller-supplied UUID retry identity, timezone-aware occurrence time, and explicit summary
-- permit optional expected-resolution timestamp after occurrence
-- allow delay while scheduled or in progress; require in-progress state for service issues
-- require operator `decide` for writes and `read` for retrieval
-- write `delivery_exception_recorded` transactionally
-- do not resolve exceptions, create intervention queues, mutate delivery status, or send notifications in this slice
+- create one durable human-intervention item per recorded exception
+- require explicit operator-selected priority: `normal`, `high`, or `urgent`
+- require an explicit human reason for queue creation
+- allow an explicit human acknowledgement transition from `open` to `acknowledged`
+- make exact create/acknowledge retries idempotent; conflicting evidence fails closed
+- require operator `decide` for queue changes and `read` for retrieval
+- make exception retrieval reflect whether an intervention has been created
+- do not resolve the exception, change delivery status, or send notifications in this slice
 
 Routing roadmap:
 
@@ -431,15 +441,15 @@ Completed:
 - Durable customer/provider notification preparation with unresolved destinations — PR #51
 - Human-controlled appointment proposal and confirmation state management — PR #52
 - Delivery execution status tracking: `scheduled` → `in_progress` — PR #53
+- Immutable delay and service-issue recording against active delivery — PR #54
 
 Current bounded work:
 
-- Immutable delay and service-issue recording against active delivery
+- Human intervention queue creation and acknowledgement
 
 Planned next:
 
 - Notification destination resolution and delivery authorization
-- Human intervention queues
 - Service completion confirmation
 - Complete event history
 
