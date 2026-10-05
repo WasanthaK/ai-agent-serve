@@ -225,6 +225,18 @@ python3 tests/smoke_phase3.py
 
 It verifies the controlled workflow, conversation loop, tool restrictions, safety escalation, approvals, persistence and audit history.
 
+## Cross-project boundary with Quixo
+
+`ai-agent-serve` interprets and transforms inbound service requests. It is the provider-neutral AI interpretation/transformation service, not the commercial system of record.
+
+- The agent interprets and transforms; Quixo/QuoteService owns commercial authority — canonical `ServiceRequest`, tenant/company membership and authorization, provider/supplier eligibility, request distribution, quote lifecycle, approval, customer acceptance, buyer award, Engagement, deposits/variations, invoice/payment, and audit for those transitions.
+- AI output is evidence/proposal, never Quixo commercial authority.
+- Inference should become provider-neutral; business/skill code must not instantiate a provider SDK directly.
+- Original inbound content survives semantic transformation; an AI summary never becomes the sole surviving customer input.
+- Deterministic code remains authoritative for authentication, authorization, state transitions, idempotency and business invariants.
+
+The full boundary, invariants and provider-neutral runtime targets are defined in `docs/QUIXO-AI-INTEGRATION-ARCHITECTURE.md`.
+
 ## Future integrations
 
 The controlled tool layer can later support Quixo operations, email and messaging adapters, WhatsApp, CRM actions, scheduling, MCP servers, external APIs and separate GPU-based local inference.

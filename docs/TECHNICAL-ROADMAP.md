@@ -21,6 +21,27 @@ Every phase should preserve these principles:
 - External actions require authentication, authorization and an audit trail.
 - The Mac Mini remains a lightweight orchestration node.
 
+## Quixo integration architecture (cross-cutting lane)
+
+The Quixo integration architecture is now defined. `ai-agent-serve` is the shared, provider-neutral AI interpretation and transformation runtime; Quixo (QuoteService) remains the commercial and system-of-record authority for the governed commercial lifecycle.
+
+The detailed cross-project contract — ownership boundary, lossless-source preservation, deterministic-code vs AI responsibility, the provider-neutral model runtime, model/provider registry and routing, provenance, human-correction and shadow evaluation, initial shared skills, rollout gates, and authority boundaries — is defined in `docs/QUIXO-AI-INTEGRATION-ARCHITECTURE.md`. This roadmap entry is a concise pointer and sequencing statement; the roadmap remains the canonical source for phase sequencing and status.
+
+Core invariant:
+
+> AI interprets and transforms. Deterministic application code owns authority and state.
+
+Roadmap-level state and requirements:
+
+- Quixo integration architecture is now defined; the detailed contract lives in `docs/QUIXO-AI-INTEGRATION-ARCHITECTURE.md`.
+- AI output is evidence/proposal, never Quixo commercial authority; the agent does not approve, accept, award, create acceptance, change Engagement, record payment, or bypass approvals.
+- Original meaningful customer input is durably preserved before semantic processing; AI output never replaces the only surviving source.
+- Deterministic code owns validation, authorization, state and invariants; no regex/keyword semantic fallback is permitted.
+- Current runtime gap: `app.py` is still directly coupled to the OpenAI SDK and a fixed model.
+- Provider-neutral inference (`AiModelProvider` / `AiModelRegistry` / `AiModelRouter`) is required before any Quixo semantic cutover.
+- Quixo cutover is channel-by-channel and gated on the rollout gates in the integration architecture document.
+- Phase 6 (service-delivery coordination) remains the current operational-lifecycle lane and is not renumbered or invalidated by this cross-cutting lane.
+
 ## Completed foundation
 
 ### Phase 1 — Structured AI intake

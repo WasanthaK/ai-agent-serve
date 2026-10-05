@@ -167,6 +167,8 @@ Linking an inbound record to an internal request is deterministic: linking the s
 
 This storage layer does not itself invoke a model, choose workflow authority or trust provider input. It only persists a normalized message that has already crossed the channel-authentication boundary.
 
+Forward reference: the semantic processing that runs after this durable inbound persistence is governed by the provider-neutral model runtime described in `docs/QUIXO-AI-INTEGRATION-ARCHITECTURE.md`. This contract continues to describe the inbound message contract only and does not imply that a provider-neutral model router already exists.
+
 ## Deliberate exclusions
 
 The normalized contract does not include:
