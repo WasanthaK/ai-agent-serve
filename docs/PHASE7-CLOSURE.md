@@ -286,3 +286,27 @@ Recording evidence requires:
 One immutable regression record is allowed per proposal. Exact retries return the same record; conflicting evidence fails closed.
 
 This slice intentionally provides no automatic test generation, no model judge authority, no apply endpoint, and no promotion endpoint. A passing regression gate is evidence only. It does not mutate the live registry, increment a version, change prompts or policies, or change production behaviour.
+
+
+## Training workspace access layer
+
+The training workspace is a read-only projection designed for the future end-user Training / Skill Improvement UI.
+
+It consolidates existing persisted evidence into one case-oriented view:
+
+- real-case skill evaluation and outcome snapshot;
+- the related improvement proposal, when present;
+- the related regression evidence, when present; and
+- limited request context needed to identify and review the case.
+
+Each training case is assigned a deterministic stage:
+
+- `accepted` — the human evaluation verdict was `pass`;
+- `needs_improvement_proposal` — a `needs_review` or `fail` evaluation has no proposal yet;
+- `needs_regression_test` — a proposal exists but regression evidence has not been recorded;
+- `regression_failed` — immutable regression evidence failed; revision is not yet supported; or
+- `ready_for_promotion_review` — the regression gate passed, but promotion is not yet supported.
+
+The access layer exposes only actions that already exist in the backend. It therefore advertises proposal creation and regression recording where valid, while explicitly blocking failed-regression revision and promotion until those capabilities are implemented.
+
+Access requires operator `read`. The projection is read-only and introduces no new mutation, model judge, training signal, prompt/policy activation, registry mutation, skill-version change, promotion, or production behaviour change.
