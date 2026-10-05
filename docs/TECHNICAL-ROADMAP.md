@@ -473,19 +473,28 @@ Deferred messaging-dependent work:
 
 ## Phase 7 — Closure and learning
 
+Completed satisfaction follow-up preparation:
+
+- one durable customer satisfaction follow-up after completed delivery implemented and CI-verified in PR #58
+- deterministic 1–5 question text is persisted
+- destination channel/address remain unresolved
+- preparation requires operator `decide`; retrieval requires `read`
+- repeated preparation is idempotent
+- no follow-up send or external action is performed
+
 Current bounded work:
 
-- prepare one durable customer satisfaction follow-up only after completed delivery
-- use deterministic 1–5 satisfaction question text
-- leave destination channel/address unresolved
-- require operator `decide` for preparation and `read` for retrieval
-- make repeated preparation idempotent
-- record `customer_satisfaction_follow_up_prepared` transactionally
-- do not send the follow-up or record a customer response in this slice
+- ingest one immutable satisfaction response against the prepared follow-up
+- require integer rating from 1 to 5
+- allow optional customer comment
+- require timezone-aware response timestamp that is not in the future and does not predate follow-up creation
+- require explicit response evidence source and operator `decide`
+- make exact retries idempotent and conflicting response evidence fail closed
+- record `customer_satisfaction_response_recorded` transactionally
+- do not trigger review requests, complaints, rework, or external actions in this slice
 
 Planned next:
 
-- Satisfaction response ingestion
 - Review-request workflows
 - Complaint and rework escalation
 - Outcome measurement
