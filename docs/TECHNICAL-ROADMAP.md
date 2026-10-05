@@ -540,21 +540,30 @@ Completed controlled skill improvement proposals:
 - exact retries are idempotent and conflicting evidence fails closed
 - no apply endpoint, registry/version mutation, policy activation, or production behavior change exists
 
+Completed regression gate before promotion:
+
+- immutable proposal-linked regression evidence implemented and CI-verified in PR #65
+- every suite requires at least one known failing target case and one known-good regression case
+- target cases must be baseline failures and regression cases must be baseline passes
+- the gate passes only when all target cases are fixed and no candidate case fails
+- current registered skill version and instructions must still match the proposal base snapshot
+- exact retries are idempotent and conflicting evidence fails closed
+- no apply endpoint, registry/version mutation, promotion, or production behavior change exists
+
 Current bounded work:
 
-- record immutable regression evidence against one skill improvement proposal
-- require at least one known failing target case and one known-good regression case
-- target cases must fail on the baseline and regression cases must pass on the baseline
-- pass the regression gate only when all target cases are fixed and no candidate case fails
-- require the current registered skill version and instructions to still match the proposal base snapshot
-- require operator `decide` to record regression evidence and `read` to retrieve it
-- make exact retries idempotent and conflicting regression evidence fail closed
-- do not apply the proposal, mutate the registry, change skill versions, promote skills, or change production behavior
+- provide a read-only training workspace projection for end-user training workflows
+- consolidate evaluation, proposal and regression evidence into one training case
+- expose deterministic stages: accepted, needs improvement proposal, needs regression test, regression failed, ready for promotion review
+- expose only currently supported actions; failed regression and promotion states must be visibly blocked until those backend capabilities exist
+- require operator `read`
+- do not create new mutation, model-judge, promotion, registry, prompt, policy, or production authority
 
 Planned next:
 
-- Training/evaluation API and end-user Training / Skill Improvement UI
-- Controlled skill promotion after regression evidence
+- End-user Training / Skill Improvement UI
+- Revision path after failed regression
+- Controlled skill promotion after passing regression evidence
 
 Production behaviour must never change solely because of unreviewed model output.
 
