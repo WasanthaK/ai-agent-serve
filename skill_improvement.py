@@ -87,6 +87,7 @@ def _normalize_text(value, field_name, max_length):
 
 
 def _result(row):
+    promoted = row["status"] == "promoted"
     return {
         "proposal_id": str(row["id"]),
         "request_id": str(row["request_id"]),
@@ -100,11 +101,13 @@ def _result(row):
         "status": row["status"],
         "proposed_by": row["proposed_by"],
         "created_at": row["created_at"],
-        "applied": False,
-        "skill_version_changed": False,
-        "registry_changed": False,
-        "policy_change_applied": False,
-        "production_behaviour_changed": False,
+        "applied": promoted,
+        "skill_version_changed": promoted,
+        "registry_changed": promoted,
+        "policy_change_applied": (
+            promoted and row["change_scope"] == "policy"
+        ),
+        "production_behaviour_changed": promoted,
     }
 
 
