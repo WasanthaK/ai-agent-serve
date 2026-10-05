@@ -87,6 +87,10 @@ from skill_regression import (
     record_skill_regression_test,
     get_skill_regression_tests,
 )
+from training_workspace import (
+    get_training_case,
+    list_training_cases,
+)
 
 
 def ready_analysis():
@@ -1405,6 +1409,42 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             regression_events[0]["details"][
                 "production_behaviour_changed"
             ]
+        )
+
+        training_case = get_training_case(
+            UUID(clarification_evaluation["evaluation_id"])
+        )
+        self.assertEqual(
+            training_case["training_stage"],
+            "ready_for_promotion_review",
+        )
+        self.assertEqual(
+            training_case["proposal"]["proposal_id"],
+            proposal["proposal_id"],
+        )
+        self.assertEqual(
+            training_case["regression"]["regression_test_id"],
+            regression_test["regression_test_id"],
+        )
+        self.assertEqual(training_case["supported_actions"], [])
+        self.assertEqual(
+            training_case["blocked_reason"],
+            "promotion_not_supported",
+        )
+        self.assertFalse(training_case["promotion_supported"])
+        self.assertFalse(
+            training_case["production_behaviour_changed"]
+        )
+
+        promotion_ready_cases = list_training_cases(
+            stage="ready_for_promotion_review",
+            skill_name="request_clarification",
+            limit=10,
+        )
+        self.assertEqual(len(promotion_ready_cases), 1)
+        self.assertEqual(
+            promotion_ready_cases[0]["evaluation_id"],
+            clarification_evaluation["evaluation_id"],
         )
 
 

@@ -1276,6 +1276,52 @@ class RouteAuthorizationTests(unittest.TestCase):
             self.assertEqual(allowed.status_code, 200)
             retrieve.assert_called_once_with(self.request_id)
 
+    def test_training_workspace_requires_read_permission(self):
+        evaluation_id = uuid4()
+        case = {
+            "evaluation_id": str(evaluation_id),
+            "request_id": str(self.request_id),
+            "training_stage": "needs_regression_test",
+            "supported_actions": ["record_regression_test"],
+            "promotion_supported": False,
+        }
+
+        with patch.object(
+            api,
+            "list_training_cases",
+            return_value=[case],
+        ) as listing:
+            denied = self.client.get(
+                "/training/cases",
+                headers={"X-API-Key": INBOUND_KEY},
+            )
+            self.assertEqual(denied.status_code, 401)
+            listing.assert_not_called()
+
+            allowed = self.client.get(
+                "/training/cases?stage=needs_regression_test&limit=25",
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            listing.assert_called_once_with(
+                stage="needs_regression_test",
+                skill_name=None,
+                limit=25,
+            )
+            self.assertFalse(allowed.json()["promotion_supported"])
+
+        with patch.object(
+            api,
+            "get_training_case",
+            return_value=case,
+        ) as retrieve:
+            allowed = self.client.get(
+                f"/training/cases/{evaluation_id}",
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            retrieve.assert_called_once_with(evaluation_id)
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)
