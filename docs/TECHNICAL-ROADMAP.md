@@ -482,20 +482,28 @@ Completed satisfaction follow-up preparation:
 - repeated preparation is idempotent
 - no follow-up send or external action is performed
 
+Completed satisfaction response ingestion:
+
+- one immutable satisfaction response against the prepared follow-up implemented and CI-verified in PR #59
+- integer ratings 1–5 plus optional customer comment are supported
+- response timestamps must be timezone-aware, non-future, and not predate follow-up creation
+- explicit response evidence source and operator `decide` are required
+- exact retries are idempotent; conflicting response evidence fails closed
+- no automated review request, complaint, rework, or external action is triggered
+
 Current bounded work:
 
-- ingest one immutable satisfaction response against the prepared follow-up
-- require integer rating from 1 to 5
-- allow optional customer comment
-- require timezone-aware response timestamp that is not in the future and does not predate follow-up creation
-- require explicit response evidence source and operator `decide`
-- make exact retries idempotent and conflicting response evidence fail closed
-- record `customer_satisfaction_response_recorded` transactionally
-- do not trigger review requests, complaints, rework, or external actions in this slice
+- prepare one durable public-review request only after a satisfaction response exists
+- require explicit operator reason and operator `decide`
+- do not gate preparation on satisfaction rating
+- leave review target platform/link unresolved
+- leave outbound destination channel/address unresolved
+- make exact preparation retries idempotent and conflicting evidence fail closed
+- record `public_review_request_prepared` transactionally
+- do not send the review request or perform any external action in this slice
 
 Planned next:
 
-- Review-request workflows
 - Complaint and rework escalation
 - Outcome measurement
 - Skill evaluation against real cases
