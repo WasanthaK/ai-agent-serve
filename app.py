@@ -216,6 +216,12 @@ from skill_regression import (
     get_skill_regression_tests,
     record_skill_regression_test,
 )
+from training_workspace import (
+    TrainingWorkspaceNotFoundError,
+    TrainingWorkspaceValidationError,
+    get_training_case,
+    list_training_cases,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -716,6 +722,41 @@ def record_request_satisfaction_response(
         SatisfactionFollowUpConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/training/cases",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_training_cases(
+    stage: Optional[str] = None,
+    skill_name: Optional[str] = None,
+    limit: int = 50,
+):
+    try:
+        return {
+            "cases": list_training_cases(
+                stage=stage,
+                skill_name=skill_name,
+                limit=limit,
+            ),
+            "promotion_supported": False,
+        }
+    except TrainingWorkspaceValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get(
+    "/training/cases/{evaluation_id}",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_training_case(evaluation_id: UUID):
+    try:
+        return get_training_case(evaluation_id)
+    except TrainingWorkspaceNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TrainingWorkspaceValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get(
