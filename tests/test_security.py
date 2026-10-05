@@ -1276,6 +1276,23 @@ class RouteAuthorizationTests(unittest.TestCase):
             self.assertEqual(allowed.status_code, 200)
             retrieve.assert_called_once_with(self.request_id)
 
+    def test_training_console_contains_no_business_data_or_credentials(self):
+        response = self.client.get("/training")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/html", response.headers["content-type"])
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertEqual(response.headers["referrer-policy"], "no-referrer")
+        self.assertEqual(response.headers["x-frame-options"], "DENY")
+        self.assertIn("default-src 'self'", response.headers["content-security-policy"])
+        body = response.text
+        self.assertIn("Training &amp; Skill Improvement", body)
+        self.assertIn("Operator API key", body)
+        self.assertIn("/training/cases", body)
+        self.assertIn("create_improvement_revision", body)
+        self.assertNotIn("AGENT_OPERATOR_API_KEY", body)
+        self.assertNotIn("localStorage", body)
+        self.assertNotIn("sessionStorage", body)
+
     def test_training_workspace_requires_read_permission(self):
         evaluation_id = uuid4()
         case = {
