@@ -201,6 +201,7 @@ TRAINING_UI_HTML = r"""<!doctype html>
               <option value="needs_regression_test">Needs regression test</option>
               <option value="regression_failed">Regression failed</option>
               <option value="ready_for_promotion_review">Ready for promotion review</option>
+              <option value="promoted">Promoted</option>
             </select>
           </label>
           <label>
@@ -301,7 +302,8 @@ TRAINING_UI_HTML = r"""<!doctype html>
       needs_improvement_proposal: "Needs proposal",
       needs_regression_test: "Needs regression",
       regression_failed: "Regression failed",
-      ready_for_promotion_review: "Promotion-ready"
+      ready_for_promotion_review: "Promotion-ready",
+      promoted: "Promoted"
     };
     return labels[stage] || stage;
   }
@@ -415,6 +417,15 @@ TRAINING_UI_HTML = r"""<!doctype html>
         ["Target cases fixed", item.regression.fixed_target_cases + " / " + item.regression.target_cases],
         ["Regression failures", item.regression.regression_failures],
         ["Candidate failures", item.regression.candidate_failures]
+      ]));
+    }
+
+    if (item.promotion) {
+      body.append(kvSection("Promotion", [
+        ["Promotion ID", item.promotion.promotion_id],
+        ["Promoted version", item.promotion.promoted_skill_version],
+        ["Reason", item.promotion.reason],
+        ["Promoted by", item.promotion.promoted_by]
       ]));
     }
 
@@ -604,16 +615,40 @@ TRAINING_UI_HTML = r"""<!doctype html>
     return box;
   }
 
+  function promotionForm(item) {
+    const box = actionIntro(
+      "Promote tested skill version",
+      "This human action makes the regression-passed amendment live and increments the skill to the next minor version. The full audit history remains preserved."
+    );
+    const form = node("div", "form-grid");
+    const reason = textarea("Why should this tested change become live?");
+    const submit = node("button", "button", "Promote skill");
+    submit.type = "button";
+    submit.addEventListener("click", () => submitAction(submit, async () => {
+      await requestJson("/requests/" + item.request_id + "/skill-promotions", {
+        method: "POST",
+        body: JSON.stringify({
+          regression_test_id: item.regression.regression_test_id,
+          reason: reason.value.trim()
+        })
+      });
+    }, item));
+    form.append(labeledField("Promotion reason", reason), submit);
+    box.append(form);
+    return box;
+  }
+
   function buildActionBox(item) {
     const actions = item.supported_actions || [];
     if (actions.includes("create_improvement_proposal")) return proposalForm(item);
     if (actions.includes("record_regression_test")) return regressionForm(item);
     if (actions.includes("create_improvement_revision")) return revisionForm(item);
+    if (actions.includes("promote_skill")) return promotionForm(item);
 
-    if (item.training_stage === "ready_for_promotion_review") {
+    if (item.training_stage === "promoted") {
       return actionIntro(
-        "Ready for promotion review",
-        "Regression evidence passed. Promotion is deliberately unavailable until the controlled promotion capability is implemented."
+        "Skill version is live",
+        "This human-approved, regression-passed change has been promoted and is now part of the active skill registry."
       );
     }
     if (item.training_stage === "accepted") {
