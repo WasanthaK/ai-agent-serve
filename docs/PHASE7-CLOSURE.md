@@ -44,3 +44,26 @@ This slice does not:
 - perform any external action.
 
 The PostgreSQL lifecycle proof extends the completed delivery flow through satisfaction follow-up preparation and verifies one durable record, stable retry identity, one audit event, unresolved destination, no response, and no external send.
+
+
+## Satisfaction response ingestion
+
+A prepared satisfaction follow-up may receive exactly one durable response evidence record.
+
+The response is operator-recorded evidence and requires:
+
+- the same actioned request;
+- the exact prepared follow-up ID;
+- an integer rating from 1 through 5;
+- a timezone-aware response timestamp that cannot be in the future or predate follow-up creation;
+- an explicit response evidence source;
+- optional customer comment; and
+- operator `decide`.
+
+The first valid response moves the follow-up from `prepared` to `responded`.
+
+An exact retry with the same evidence is idempotent. A conflicting retry fails closed and preserves the original response.
+
+The audit event records the rating and evidence source while explicitly stating that no review request, complaint, rework case, or external action was created.
+
+This slice does not infer sentiment beyond the submitted rating and does not automatically trigger downstream closure workflows.
