@@ -1,8 +1,7 @@
 """Internal service-delivery execution status.
 
-Creates delivery execution state from a confirmed appointment and permits the
-human-controlled transition from scheduled to in_progress. Completion and
-exceptions are intentionally outside this slice.
+Creates delivery execution state from a confirmed appointment and permits
+human-controlled transitions from scheduled to in_progress to completed.
 """
 
 import uuid
@@ -69,6 +68,8 @@ def _normalize_reason(reason, field_name):
 
 
 def _result(row):
+    completion_recorded = row["status"] == "completed"
+    exception_recorded = bool(row.get("exception_recorded", False))
     return {
         "delivery_status_id": str(row["id"]),
         "request_id": str(row["request_id"]),
@@ -82,9 +83,12 @@ def _result(row):
         "started_by": row["started_by"],
         "start_reason": row["start_reason"],
         "started_at": row["started_at"],
+        "completed_by": row.get("completed_by"),
+        "completion_reason": row.get("completion_reason"),
+        "completed_at": row.get("completed_at"),
         "updated_at": row["updated_at"],
-        "completion_recorded": False,
-        "exception_recorded": False,
+        "completion_recorded": completion_recorded,
+        "exception_recorded": exception_recorded,
         "notification_sent": False,
     }
 
@@ -95,9 +99,15 @@ def get_delivery_status(request_id):
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT *
-                FROM service_delivery_status
-                WHERE request_id = %s
+                SELECT
+                    s.*,
+                    EXISTS (
+                        SELECT 1
+                        FROM service_delivery_exceptions e
+                        WHERE e.delivery_status_id = s.id
+                    ) AS exception_recorded
+                FROM service_delivery_status s
+                WHERE s.request_id = %s
                 """,
                 (request_id,),
             )
@@ -313,3 +323,140 @@ def start_delivery(request_id, delivery_status_id, *, reason, actor):
             )
 
             return _result(started)
+
+
+def complete_delivery(request_id, delivery_status_id, *, reason, actor):
+    request_id = _validate_uuid(request_id, "request_id")
+    delivery_status_id = _validate_uuid(
+        delivery_status_id,
+        "delivery_status_id",
+    )
+    actor = _normalize_actor(actor)
+    reason = _normalize_reason(reason, "completion_reason")
+
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT id, status
+                FROM agent_requests
+                WHERE id = %s
+                FOR UPDATE
+                """,
+                (request_id,),
+            )
+            request = cur.fetchone()
+            if request is None:
+                raise DeliveryStatusNotFoundError("Request not found")
+            if request["status"] != "actioned":
+                raise DeliveryStatusStateError(
+                    "Completing delivery requires request status actioned"
+                )
+
+            cur.execute(
+                """
+                SELECT *
+                FROM service_delivery_status
+                WHERE request_id = %s
+                  AND id = %s
+                FOR UPDATE
+                """,
+                (request_id, delivery_status_id),
+            )
+            current = cur.fetchone()
+            if current is None:
+                raise DeliveryStatusNotFoundError(
+                    "Delivery status record not found for request"
+                )
+
+            if current["status"] == "completed":
+                if (
+                    current["completed_by"] == actor
+                    and current["completion_reason"] == reason
+                ):
+                    cur.execute(
+                        """
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM service_delivery_exceptions
+                            WHERE delivery_status_id = %s
+                        ) AS exception_recorded
+                        """,
+                        (delivery_status_id,),
+                    )
+                    current["exception_recorded"] = cur.fetchone()[
+                        "exception_recorded"
+                    ]
+                    return _result(current)
+                raise DeliveryStatusConflictError(
+                    "Delivery is already completed with different evidence"
+                )
+
+            if current["status"] != "in_progress":
+                raise DeliveryStatusStateError(
+                    "Delivery must be in progress before completion"
+                )
+
+            cur.execute(
+                """
+                SELECT COUNT(*) AS open_count
+                FROM service_delivery_interventions
+                WHERE request_id = %s
+                  AND delivery_status_id = %s
+                  AND status = 'open'
+                """,
+                (request_id, delivery_status_id),
+            )
+            open_count = cur.fetchone()["open_count"]
+            if open_count:
+                raise DeliveryStatusStateError(
+                    "Delivery cannot complete while human interventions are open"
+                )
+
+            cur.execute(
+                """
+                UPDATE service_delivery_status
+                SET status = 'completed',
+                    completed_by = %s,
+                    completion_reason = %s,
+                    completed_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = %s
+                RETURNING *
+                """,
+                (actor, reason, delivery_status_id),
+            )
+            completed = cur.fetchone()
+
+            cur.execute(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM service_delivery_exceptions
+                    WHERE delivery_status_id = %s
+                ) AS exception_recorded
+                """,
+                (delivery_status_id,),
+            )
+            completed["exception_recorded"] = cur.fetchone()[
+                "exception_recorded"
+            ]
+
+            record_event_in_transaction(
+                cur,
+                request_id=request_id,
+                event_type="delivery_status_completed",
+                actor=actor,
+                details={
+                    "delivery_status_id": str(delivery_status_id),
+                    "appointment_id": str(completed["appointment_id"]),
+                    "provider_id": str(completed["provider_id"]),
+                    "previous_status": "in_progress",
+                    "new_status": "completed",
+                    "exception_recorded": completed["exception_recorded"],
+                    "open_intervention_count": 0,
+                    "notification_sent": False,
+                },
+            )
+
+            return _result(completed)

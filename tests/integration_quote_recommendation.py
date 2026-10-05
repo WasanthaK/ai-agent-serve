@@ -40,6 +40,8 @@ from delivery_appointment import (
     propose_delivery_appointment,
 )
 from delivery_status import (
+    DeliveryStatusStateError,
+    complete_delivery,
     get_delivery_status,
     initialize_delivery_status,
     start_delivery,
@@ -627,6 +629,14 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         self.assertFalse(intervention["delivery_status_changed"])
         self.assertFalse(intervention["notification_sent"])
 
+        with self.assertRaises(DeliveryStatusStateError):
+            complete_delivery(
+                request_id,
+                UUID(delivery_status["delivery_status_id"]),
+                reason="Human confirmed service work is complete.",
+                actor="operator:ci",
+            )
+
         exceptions_after_queue = get_delivery_exceptions(request_id)
         issue_after_queue = next(
             item
@@ -685,6 +695,52 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             self.assertFalse(event["details"]["exception_resolved"])
             self.assertFalse(event["details"]["delivery_status_changed"])
             self.assertFalse(event["details"]["notification_sent"])
+
+        completed = complete_delivery(
+            request_id,
+            UUID(delivery_status["delivery_status_id"]),
+            reason="Human confirmed service work is complete.",
+            actor="operator:ci",
+        )
+        completed_retry = complete_delivery(
+            request_id,
+            UUID(delivery_status["delivery_status_id"]),
+            reason="Human confirmed service work is complete.",
+            actor="operator:ci",
+        )
+
+        self.assertEqual(
+            completed_retry["delivery_status_id"],
+            completed["delivery_status_id"],
+        )
+        self.assertEqual(completed["status"], "completed")
+        self.assertTrue(completed["completion_recorded"])
+        self.assertTrue(completed["exception_recorded"])
+        self.assertIsNotNone(completed["completed_at"])
+        self.assertFalse(completed["notification_sent"])
+
+        persisted_completed = get_delivery_status(request_id)
+        self.assertEqual(persisted_completed["status"], "completed")
+        self.assertTrue(persisted_completed["completion_recorded"])
+        self.assertTrue(persisted_completed["exception_recorded"])
+        self.assertEqual(get_request(request_id)["status"], "actioned")
+
+        completion_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"] == "delivery_status_completed"
+        ]
+        self.assertEqual(len(completion_events), 1)
+        self.assertTrue(
+            completion_events[0]["details"]["exception_recorded"]
+        )
+        self.assertEqual(
+            completion_events[0]["details"]["open_intervention_count"],
+            0,
+        )
+        self.assertFalse(
+            completion_events[0]["details"]["notification_sent"]
+        )
 
 
 if __name__ == "__main__":

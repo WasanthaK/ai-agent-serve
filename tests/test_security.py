@@ -702,6 +702,42 @@ class RouteAuthorizationTests(unittest.TestCase):
                 "operator:wasantha",
             )
 
+    def test_service_completion_requires_decide_permission(self):
+        delivery_status_id = uuid4()
+        payload = {
+            "delivery_status_id": str(delivery_status_id),
+            "reason": "Human confirmed service completion",
+        }
+        result = {
+            "delivery_status_id": str(delivery_status_id),
+            "request_id": str(self.request_id),
+            "status": "completed",
+        }
+
+        with patch.object(
+            api,
+            "complete_delivery",
+            return_value=result,
+        ) as complete:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/delivery-status/complete",
+                json=payload,
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            complete.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/delivery-status/complete",
+                json=payload,
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                complete.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
     def test_delivery_exception_write_requires_decide_permission(self):
         exception_id = uuid4()
         delivery_status_id = uuid4()

@@ -391,16 +391,26 @@ Completed delivery exception recording:
 - writes require operator `decide`; reads require `read`
 - no exception resolution, delivery-state mutation, intervention creation, or notification side effect is introduced
 
+Completed human intervention queue:
+
+- one intervention item per recorded exception implemented and CI-verified in PR #55
+- priorities are explicit: `normal`, `high`, or `urgent`
+- creation and acknowledgement both require explicit human reasons
+- exact retries are idempotent; conflicting evidence fails closed
+- exception retrieval reflects persisted intervention existence
+- writes require operator `decide`; reads require `read`
+- no exception resolution, delivery-state mutation, notification send, dispatch, or external action is introduced
+
 Current bounded work:
 
-- create one durable human-intervention item per recorded exception
-- require explicit operator-selected priority: `normal`, `high`, or `urgent`
-- require an explicit human reason for queue creation
-- allow an explicit human acknowledgement transition from `open` to `acknowledged`
-- make exact create/acknowledge retries idempotent; conflicting evidence fails closed
-- require operator `decide` for queue changes and `read` for retrieval
-- make exception retrieval reflect whether an intervention has been created
-- do not resolve the exception, change delivery status, or send notifications in this slice
+- add explicit human-controlled delivery completion from `in_progress` to `completed`
+- require explicit completion reason and operator authority
+- block completion while any linked human intervention remains `open`
+- allow completion after intervention acknowledgement without erasing historical exception/intervention evidence
+- make exact completion retries idempotent; conflicting completion evidence fails closed
+- make delivery-status retrieval report persisted exception history truthfully
+- keep the request workflow status unchanged as `actioned`
+- do not send completion notifications or perform external actions in this slice
 
 Routing roadmap:
 
@@ -442,15 +452,15 @@ Completed:
 - Human-controlled appointment proposal and confirmation state management — PR #52
 - Delivery execution status tracking: `scheduled` → `in_progress` — PR #53
 - Immutable delay and service-issue recording against active delivery — PR #54
+- Human intervention queue creation and acknowledgement — PR #55
 
 Current bounded work:
 
-- Human intervention queue creation and acknowledgement
+- Human-controlled service completion confirmation: `in_progress` → `completed`
 
 Planned next:
 
 - Notification destination resolution and delivery authorization
-- Service completion confirmation
 - Complete event history
 
 ## Phase 7 — Closure and learning

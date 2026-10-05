@@ -561,6 +561,32 @@ This slice does not:
 - dispatch work; or
 - perform any external action.
 
+## Service completion confirmation
+
+Service completion is an explicit human-controlled delivery-state transition from `in_progress` to `completed`.
+
+Completion requires:
+
+- the same actioned request and delivery-status record;
+- current delivery status `in_progress`;
+- operator `decide`;
+- an explicit human-authored completion reason; and
+- zero linked human-intervention items still in `open` state.
+
+Acknowledged interventions do not block completion, but neither completion nor acknowledgement erases historical exception/intervention evidence.
+
+Exact completion retries are idempotent. Conflicting completion evidence fails closed.
+
+Delivery-status retrieval reports whether exception history exists, rather than returning a hard-coded false value.
+
+This slice does not:
+
+- change the higher-level request status from `actioned`;
+- resolve historical exceptions;
+- send completion notifications;
+- dispatch work; or
+- perform any external action.
+
 ## Current exclusions
 
 This routing stage does not yet include:
@@ -633,3 +659,6 @@ The Phase 6 delivery-exception PostgreSQL proof records both a delay and an in-p
 
 
 The Phase 6 human-intervention PostgreSQL proof creates one intervention from a persisted service issue, verifies exact retry identity, verifies the exception reports intervention creation, acknowledges the queue item exactly once, preserves audit events, and proves no exception-resolution/delivery-state/notification side effects.
+
+
+The Phase 6 service-completion PostgreSQL proof first verifies completion is rejected while an intervention remains open, then acknowledges the intervention, completes the delivery exactly once, preserves retry identity, reports exception history truthfully, leaves request status `actioned`, and proves no notification side effect.

@@ -136,6 +136,7 @@ from delivery_status import (
     DeliveryStatusNotFoundError,
     DeliveryStatusStateError,
     DeliveryStatusValidationError,
+    complete_delivery,
     get_delivery_status,
     initialize_delivery_status,
     start_delivery,
@@ -260,6 +261,11 @@ class DeliveryStatusInitializeInput(BaseModel):
 
 
 class DeliveryStatusStartInput(BaseModel):
+    delivery_status_id: UUID
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+class DeliveryStatusCompleteInput(BaseModel):
     delivery_status_id: UUID
     reason: str = Field(min_length=1, max_length=2000)
 
@@ -1248,6 +1254,30 @@ def start_request_delivery(
 ):
     try:
         return start_delivery(
+            request_id,
+            payload.delivery_status_id,
+            reason=payload.reason,
+            actor=operator.actor,
+        )
+    except DeliveryStatusNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DeliveryStatusValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        DeliveryStatusStateError,
+        DeliveryStatusConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/requests/{request_id}/delivery-status/complete")
+def complete_request_delivery(
+    request_id: UUID,
+    payload: DeliveryStatusCompleteInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return complete_delivery(
             request_id,
             payload.delivery_status_id,
             reason=payload.reason,
