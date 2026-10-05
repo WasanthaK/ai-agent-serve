@@ -605,7 +605,26 @@ Production behaviour must never change solely because of unreviewed model output
 
 ## Phase 8 — Platform capabilities
 
-- Multi-tenant isolation
+### Phase 8A — Multi-tenant isolation
+
+Current bounded work:
+
+- establish durable tenant identity before attaching business data to tenants
+- use canonical tenant keys and explicit lifecycle states
+- preserve an append-only tenant lifecycle audit trail
+- prove tenant create/read/status transitions on PostgreSQL
+- do not claim isolation until requests, providers, credentials and every access path are tenant-bound
+- do not expose tenant-management API authority in this identity-only slice
+
+Planned next:
+
+- bind authenticated principals and inbound channels to explicit tenant identity
+- add tenant ownership to requests and inbound messages
+- enforce tenant-scoped reads/writes fail-closed
+- extend provider and downstream request-owned data isolation through deterministic tenant joins
+
+Remaining Phase 8 capabilities:
+
 - Tenant-specific policies and skills
 - Role-based access control
 - Usage accounting
