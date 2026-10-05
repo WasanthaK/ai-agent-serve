@@ -83,6 +83,53 @@ class SkillRegistryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             registry.build_json_schema(("first", "second"))
 
+    def test_replace_requires_exact_expected_base(self):
+        registry = SkillRegistry()
+        original = AgentSkill(
+            name="example",
+            version="1.0.0",
+            description="Example",
+            instructions="Base instructions",
+        )
+        registry.register(original)
+
+        promoted = AgentSkill(
+            name="example",
+            version="1.1.0",
+            description="Example",
+            instructions="Base instructions\n\nApproved amendment",
+        )
+        registry.replace(
+            promoted,
+            expected_version="1.0.0",
+            expected_instructions="Base instructions",
+        )
+        self.assertEqual(registry.get("example").version, "1.1.0")
+
+        with self.assertRaises(ValueError):
+            registry.replace(
+                original,
+                expected_version="1.0.0",
+            )
+
+    def test_build_contract_snapshots_versions_schema_and_instructions(self):
+        registry = SkillRegistry()
+        registry.register(
+            AgentSkill(
+                name="example",
+                version="2.3.0",
+                description="Example",
+                instructions="Use the reviewed behavior.",
+                schema_properties={"value": {"type": "string"}},
+                required_fields=("value",),
+            )
+        )
+
+        contract = registry.build_contract(("example",))
+        self.assertEqual(contract["versions"], {"example": "2.3.0"})
+        self.assertIn("example v2.3.0", contract["instructions"])
+        self.assertEqual(contract["schema"]["required"], ["value"])
+
     def test_customer_communication_restricts_tools(self):
         skill = skill_registry.get("customer_communication")
 
