@@ -131,6 +131,15 @@ from delivery_appointment import (
     get_delivery_appointment,
     propose_delivery_appointment,
 )
+from delivery_status import (
+    DeliveryStatusConflictError,
+    DeliveryStatusNotFoundError,
+    DeliveryStatusStateError,
+    DeliveryStatusValidationError,
+    get_delivery_status,
+    initialize_delivery_status,
+    start_delivery,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -225,6 +234,16 @@ class DeliveryAppointmentProposalInput(BaseModel):
 
 class DeliveryAppointmentConfirmationInput(BaseModel):
     appointment_id: UUID
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+class DeliveryStatusInitializeInput(BaseModel):
+    appointment_id: UUID
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+class DeliveryStatusStartInput(BaseModel):
+    delivery_status_id: UUID
     reason: str = Field(min_length=1, max_length=2000)
 
 
@@ -1138,6 +1157,72 @@ def confirm_request_delivery_appointment(
     except (
         DeliveryAppointmentStateError,
         DeliveryAppointmentConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/delivery-status",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_delivery_status(request_id: UUID):
+    try:
+        status = get_delivery_status(request_id)
+    except DeliveryStatusValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if status is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Delivery status not found",
+        )
+    return status
+
+
+@app.post("/requests/{request_id}/delivery-status/schedule")
+def schedule_request_delivery(
+    request_id: UUID,
+    payload: DeliveryStatusInitializeInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return initialize_delivery_status(
+            request_id,
+            payload.appointment_id,
+            reason=payload.reason,
+            actor=operator.actor,
+        )
+    except DeliveryStatusNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DeliveryStatusValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        DeliveryStatusStateError,
+        DeliveryStatusConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/requests/{request_id}/delivery-status/start")
+def start_request_delivery(
+    request_id: UUID,
+    payload: DeliveryStatusStartInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return start_delivery(
+            request_id,
+            payload.delivery_status_id,
+            reason=payload.reason,
+            actor=operator.actor,
+        )
+    except DeliveryStatusNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DeliveryStatusValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        DeliveryStatusStateError,
+        DeliveryStatusConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
