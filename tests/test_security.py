@@ -863,11 +863,18 @@ class RouteAuthorizationTests(unittest.TestCase):
             "timeline": [],
         }
 
-        with patch.object(
-            api,
-            "get_delivery_timeline",
-            return_value=result,
-        ) as timeline:
+        with (
+            patch.object(
+                api,
+                "get_request",
+                return_value={"id": self.request_id},
+            ),
+            patch.object(
+                api,
+                "get_delivery_timeline",
+                return_value=result,
+            ) as timeline,
+        ):
             denied = self.client.get(
                 f"/requests/{self.request_id}/delivery-timeline",
             )
