@@ -293,6 +293,12 @@ _INBOUND_LIMITER = RollingWindowRateLimiter(_INBOUND_RATE_LIMIT)
 _OPERATOR_LIMITER = RollingWindowRateLimiter(_OPERATOR_RATE_LIMIT)
 
 
+def _set_request_tenant_context(request, tenant_key):
+    state = getattr(request, "state", None)
+    if state is not None:
+        state.tenant_key = tenant_key
+
+
 def _enforce_rate_limit(request, limiter, identity):
     retry_after = limiter.check(identity)
     if retry_after is None:
@@ -331,7 +337,7 @@ def _authenticate_inbound(request: Request, key: str | None) -> str:
         audit_denial(request, "invalid_inbound_credential")
         raise HTTPException(status_code=401, detail="Invalid API credentials")
 
-    request.state.tenant_key = tenant_key
+    _set_request_tenant_context(request, tenant_key)
     identity = f"channel:{source}"
     _enforce_rate_limit(request, _INBOUND_LIMITER, identity)
     return source
@@ -394,7 +400,10 @@ def require_operator_permission(permission: str):
         if permission not in operator.permissions:
             audit_denial(request, "operator_permission_denied", operator.actor)
             raise HTTPException(status_code=403, detail="Operator permission denied")
-        request.state.tenant_key = operator.tenant_key
+        _set_request_tenant_context(
+            request,
+            operator.tenant_key,
+        )
         _enforce_rate_limit(request, _OPERATOR_LIMITER, operator.actor)
         return operator
 
