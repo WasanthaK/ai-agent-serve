@@ -1441,12 +1441,12 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             training_case["regression"]["regression_test_id"],
             regression_test["regression_test_id"],
         )
-        self.assertEqual(training_case["supported_actions"], [])
         self.assertEqual(
-            training_case["blocked_reason"],
-            "promotion_not_supported",
+            training_case["supported_actions"],
+            ["promote_skill"],
         )
-        self.assertFalse(training_case["promotion_supported"])
+        self.assertIsNone(training_case["blocked_reason"])
+        self.assertTrue(training_case["promotion_supported"])
         self.assertFalse(
             training_case["production_behaviour_changed"]
         )
