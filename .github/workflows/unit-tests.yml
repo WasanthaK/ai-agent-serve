@@ -116,3 +116,4 @@ jobs:
           PYTHONPATH=. python tests/integration_quote_comparison.py -q
           PYTHONPATH=. python tests/integration_quote_recommendation.py -q
           PYTHONPATH=. python tests/integration_tenant_directory.py -q
+          PYTHONPATH=. python tests/integration_tenant_request_isolation.py -q

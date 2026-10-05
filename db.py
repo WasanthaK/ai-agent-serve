@@ -86,6 +86,7 @@ def save_request(
     result,
     request_id=None,
     skill_versions=None,
+    tenant_id=None,
 ):
     request_id = request_id or uuid.uuid4()
     correlation_id = get_correlation_id()
@@ -119,12 +120,13 @@ def save_request(
                     status,
                     missing_information,
                     follow_up_questions,
+                    tenant_id,
                     correlation_id
                 )
                 VALUES (
                     %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s
+                    %s, %s, %s, %s, %s
                 )
                 """,
                 (
@@ -141,6 +143,7 @@ def save_request(
                     status,
                     Jsonb(missing_information),
                     Jsonb(follow_up_questions),
+                    tenant_id,
                     correlation_id,
                 ),
             )
@@ -165,18 +168,67 @@ def save_request(
     return request_id
 
 
-def get_request(request_id):
+_UNSCOPED = object()
+
+
+def get_request(request_id, *, tenant_id=_UNSCOPED):
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT *
-                FROM agent_requests
-                WHERE id = %s
-                """,
-                (request_id,),
-            )
+            if tenant_id is _UNSCOPED:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM agent_requests
+                    WHERE id = %s
+                    """,
+                    (request_id,),
+                )
+            elif tenant_id is None:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM agent_requests
+                    WHERE id = %s
+                      AND tenant_id IS NULL
+                    """,
+                    (request_id,),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM agent_requests
+                    WHERE id = %s
+                      AND tenant_id = %s
+                    """,
+                    (request_id, tenant_id),
+                )
+            return cur.fetchone()
 
+
+def get_request_for_tenant(request_id, tenant_id):
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            if tenant_id is None:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM agent_requests
+                    WHERE id = %s
+                      AND tenant_id IS NULL
+                    """,
+                    (request_id,),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM agent_requests
+                    WHERE id = %s
+                      AND tenant_id = %s
+                    """,
+                    (request_id, tenant_id),
+                )
             return cur.fetchone()
 
 

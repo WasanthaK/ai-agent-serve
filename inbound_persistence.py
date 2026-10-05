@@ -44,7 +44,7 @@ def _attachments_json(message: NormalizedInboundMessage):
     ]
 
 
-def _insert_inbound_message(cur, message, message_id, payload_hash):
+def _insert_inbound_message(cur, message, message_id, payload_hash, tenant_id):
     values = (
         message_id,
         message.schema_version,
@@ -58,6 +58,7 @@ def _insert_inbound_message(cur, message, message_id, payload_hash):
         Jsonb(_attachments_json(message)),
         payload_hash,
         get_correlation_id(),
+        tenant_id,
     )
 
     if message.external_message_id is None:
@@ -75,11 +76,12 @@ def _insert_inbound_message(cur, message, message_id, payload_hash):
                 linked_request_id,
                 attachments,
                 payload_hash,
-                correlation_id
+                correlation_id,
+                tenant_id
             )
             VALUES (
                 %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s
             )
             RETURNING *
             """,
@@ -100,15 +102,14 @@ def _insert_inbound_message(cur, message, message_id, payload_hash):
                 linked_request_id,
                 attachments,
                 payload_hash,
-                correlation_id
+                correlation_id,
+                tenant_id
             )
             VALUES (
                 %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s
             )
-            ON CONFLICT (channel, external_message_id)
-                WHERE external_message_id IS NOT NULL
-            DO NOTHING
+            ON CONFLICT DO NOTHING
             RETURNING *
             """,
             values,
@@ -117,7 +118,7 @@ def _insert_inbound_message(cur, message, message_id, payload_hash):
     return cur.fetchone()
 
 
-def save_inbound_message(message: NormalizedInboundMessage):
+def save_inbound_message(message: NormalizedInboundMessage, *, tenant_id=None):
     """Persist an authenticated normalized message before downstream AI work.
 
     A channel/external-message pair is retry-safe. Repeating the exact same
@@ -135,6 +136,7 @@ def save_inbound_message(message: NormalizedInboundMessage):
                 message,
                 message_id,
                 payload_hash,
+                tenant_id,
             )
             if inserted is not None:
                 return {
@@ -142,15 +144,35 @@ def save_inbound_message(message: NormalizedInboundMessage):
                     "message": inserted,
                 }
 
-            cur.execute(
-                """
-                SELECT *
-                FROM inbound_messages
-                WHERE channel = %s
-                  AND external_message_id = %s
-                """,
-                (message.channel, message.external_message_id),
-            )
+            if tenant_id is None:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM inbound_messages
+                    WHERE channel = %s
+                      AND external_message_id = %s
+                      AND tenant_id IS NULL
+                    """,
+                    (
+                        message.channel,
+                        message.external_message_id,
+                    ),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM inbound_messages
+                    WHERE channel = %s
+                      AND external_message_id = %s
+                      AND tenant_id = %s
+                    """,
+                    (
+                        message.channel,
+                        message.external_message_id,
+                        tenant_id,
+                    ),
+                )
             existing = cur.fetchone()
 
             if existing is None:
@@ -166,34 +188,59 @@ def save_inbound_message(message: NormalizedInboundMessage):
             }
 
 
-def get_inbound_message(message_id):
+def get_inbound_message(message_id, *, tenant_id=None):
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT *
-                FROM inbound_messages
-                WHERE id = %s
-                """,
-                (message_id,),
-            )
+            if tenant_id is None:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM inbound_messages
+                    WHERE id = %s
+                      AND tenant_id IS NULL
+                    """,
+                    (message_id,),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM inbound_messages
+                    WHERE id = %s
+                      AND tenant_id = %s
+                    """,
+                    (message_id, tenant_id),
+                )
             return cur.fetchone()
 
 
-def link_inbound_message_to_request(message_id, request_id):
+def link_inbound_message_to_request(message_id, request_id, *, tenant_id=None):
     """Bind a persisted inbound record to one internal request exactly once."""
 
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT *
-                FROM inbound_messages
-                WHERE id = %s
-                FOR UPDATE
-                """,
-                (message_id,),
-            )
+            if tenant_id is None:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM inbound_messages
+                    WHERE id = %s
+                      AND tenant_id IS NULL
+                    FOR UPDATE
+                    """,
+                    (message_id,),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM inbound_messages
+                    WHERE id = %s
+                      AND tenant_id = %s
+                    FOR UPDATE
+                    """,
+                    (message_id, tenant_id),
+                )
             existing = cur.fetchone()
             if existing is None:
                 return None
@@ -208,12 +255,26 @@ def link_inbound_message_to_request(message_id, request_id):
 
             cur.execute(
                 """
-                UPDATE inbound_messages
+                UPDATE inbound_messages AS im
                 SET linked_request_id = %s,
                     updated_at = NOW()
-                WHERE id = %s
+                WHERE im.id = %s
+                  AND EXISTS (
+                      SELECT 1
+                      FROM agent_requests AS ar
+                      WHERE ar.id = %s
+                        AND (
+                            (im.tenant_id IS NULL AND ar.tenant_id IS NULL)
+                            OR im.tenant_id = ar.tenant_id
+                        )
+                  )
                 RETURNING *
                 """,
-                (request_id, message_id),
+                (request_id, message_id, request_id),
             )
-            return cur.fetchone()
+            linked = cur.fetchone()
+            if linked is None:
+                raise InboundMessageLinkConflictError(
+                    "Inbound message and request tenant ownership differ"
+                )
+            return linked

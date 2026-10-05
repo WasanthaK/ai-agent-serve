@@ -615,20 +615,30 @@ Completed tenant identity foundation:
 - PostgreSQL create/read/status-transition proof
 - identity foundation does not itself claim tenant isolation
 
+Completed tenant-bound authentication context:
+
+- optional canonical tenant binding for operator and inbound-channel credentials implemented and CI-verified in PR #71
+- authenticated tenant identity is carried in the request context
+- malformed tenant keys fail closed
+- legacy unbound credentials remain supported during migration
+
 Current bounded work:
 
-- bind authenticated operators and inbound channels to optional explicit tenant identity
-- carry tenant identity in the authenticated request context without changing existing route return contracts
-- preserve legacy unbound credentials during the migration so the current deployment does not break
-- validate configured tenant keys fail-closed against the canonical tenant-key format
-- do not yet enforce tenant ownership because request/inbound rows are not tenant-bound in this slice
+- add durable tenant ownership to agent_requests, inbound_messages and website idempotency reservations
+- require configured tenant identity to resolve to an active durable tenant before tenant-owned request creation/access
+- enforce tenant-scoped website request creation, replay, retrieval and customer-reply access
+- propagate tenant ownership through trusted Quixo WhatsApp ingress when its credential is tenant-bound
+- keep legacy unbound paths limited to legacy unowned rows
+- prevent cross-tenant inbound-to-request linkage
+- scope external-message and website idempotency identities per tenant
+- leave SendGrid ingress explicitly legacy/unowned until it has a tenant-binding authority model; live SendGrid enablement remains deferred
+- do not yet claim full isolation for provider/delivery/closure/training downstream data
 
 Planned next:
 
-- add tenant ownership to requests and inbound messages
-- require tenant-bound identities for tenant-owned request creation/access paths
-- enforce tenant-scoped reads/writes fail-closed
-- extend provider and downstream request-owned data isolation through deterministic tenant joins
+- extend tenant checks through provider selection, RFQ, quote, delivery, closure and training request-owned reads/writes
+- bind provider directory data to tenant ownership
+- remove remaining unscoped request access from externally reachable operator paths
 
 Remaining Phase 8 capabilities:
 
