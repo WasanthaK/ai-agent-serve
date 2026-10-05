@@ -154,6 +154,18 @@ class RouteAuthorizationTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(api.app)
         self.request_id = uuid4()
+        scope_patch = patch.object(
+            api,
+            "_tenant_scoped_get_request",
+            return_value={
+                "id": self.request_id,
+                "tenant_id": None,
+                "source": "website",
+                "status": "ready",
+            },
+        )
+        self.request_scope = scope_patch.start()
+        self.addCleanup(scope_patch.stop)
         audit_patch = patch.object(security.security_logger, "warning")
         self.audit_log = audit_patch.start()
         self.addCleanup(audit_patch.stop)
