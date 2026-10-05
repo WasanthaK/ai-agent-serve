@@ -846,7 +846,7 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             rating=1,
             responded_at=responded_at,
             response_source="operator-recorded phone response",
-            comment="Service completed well.",
+            comment="Service had problems.",
             actor="operator:ci",
         )
         response_retry = record_satisfaction_response(
@@ -855,7 +855,7 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             rating=1,
             responded_at=responded_at,
             response_source="operator-recorded phone response",
-            comment="Service completed well.",
+            comment="Service had problems.",
             actor="operator:ci",
         )
 
@@ -865,7 +865,7 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(response["status"], "responded")
         self.assertEqual(response["rating"], 1)
-        self.assertEqual(response["comment"], "Service completed well.")
+        self.assertEqual(response["comment"], "Service had problems.")
         self.assertTrue(response["response_recorded"])
         self.assertFalse(response["sent"])
         self.assertFalse(response["external_action_performed"])
