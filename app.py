@@ -148,6 +148,15 @@ from delivery_exception import (
     get_delivery_exceptions,
     record_delivery_exception,
 )
+from human_intervention import (
+    HumanInterventionConflictError,
+    HumanInterventionNotFoundError,
+    HumanInterventionStateError,
+    HumanInterventionValidationError,
+    acknowledge_human_intervention,
+    create_human_intervention,
+    get_human_interventions,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -262,6 +271,17 @@ class DeliveryExceptionInput(BaseModel):
     occurred_at: datetime
     summary: str = Field(min_length=1, max_length=2000)
     expected_resolution_at: Optional[datetime] = None
+
+
+class HumanInterventionCreateInput(BaseModel):
+    exception_id: UUID
+    priority: str = Field(min_length=1, max_length=20)
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+class HumanInterventionAcknowledgeInput(BaseModel):
+    intervention_id: UUID
+    reason: str = Field(min_length=1, max_length=2000)
 
 
 class CustomerReply(BaseModel):
@@ -1282,6 +1302,69 @@ def record_request_delivery_exception(
     except (
         DeliveryExceptionStateError,
         DeliveryExceptionConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/human-interventions",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_human_interventions(request_id: UUID):
+    try:
+        return {
+            "request_id": str(request_id),
+            "interventions": get_human_interventions(request_id),
+        }
+    except HumanInterventionValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/requests/{request_id}/human-interventions")
+def create_request_human_intervention(
+    request_id: UUID,
+    payload: HumanInterventionCreateInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return create_human_intervention(
+            request_id,
+            payload.exception_id,
+            priority=payload.priority,
+            reason=payload.reason,
+            actor=operator.actor,
+        )
+    except HumanInterventionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HumanInterventionValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        HumanInterventionStateError,
+        HumanInterventionConflictError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/requests/{request_id}/human-interventions/acknowledge")
+def acknowledge_request_human_intervention(
+    request_id: UUID,
+    payload: HumanInterventionAcknowledgeInput,
+    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+):
+    try:
+        return acknowledge_human_intervention(
+            request_id,
+            payload.intervention_id,
+            reason=payload.reason,
+            actor=operator.actor,
+        )
+    except HumanInterventionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HumanInterventionValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        HumanInterventionStateError,
+        HumanInterventionConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
