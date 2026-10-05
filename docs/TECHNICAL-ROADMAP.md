@@ -512,21 +512,28 @@ Completed complaint and rework escalation foundation:
 - exact retries are idempotent; conflicting same-kind evidence fails closed
 - no notification or external action is performed
 
+Completed factual outcome measurement:
+
+- read-only factual request outcome projection implemented and CI-verified in PR #62
+- persisted delivery completion, satisfaction evidence, review preparation, exception/intervention counts, complaint and rework presence are exposed
+- operator `read` is required
+- no provider score/rank is computed
+- no training signal, policy change, mutation, message, or external action is applied
+
 Current bounded work:
 
-- expose read-only factual outcome measurement for a request
-- report persisted delivery completion and completion timestamp
-- report satisfaction response state, rating and response timestamp
-- report review-request preparation
-- report delivery exception, intervention and open-intervention counts
-- report complaint and rework presence
-- require operator `read`
-- do not compute provider score/rank
-- do not apply training signals, policy changes, or external actions
+- record human skill evaluation against a persisted real case
+- bind evaluation to the exact `request_created` or `request_reanalysed` analysis event
+- accept only a skill/version proven in that event's persisted `skill_versions` provenance
+- snapshot factual outcome evidence at evaluation time
+- support only human verdicts: `pass`, `needs_review`, or `fail`
+- require explicit evaluator notes and operator `decide`
+- permit one immutable evaluation per analysis-event/skill pair
+- make exact retries idempotent and conflicting verdict evidence fail closed
+- do not apply training signals, version changes, policy changes, skill promotion, or production behaviour changes
 
 Planned next:
 
-- Skill evaluation against real cases
 - Controlled improvement of instructions and policies
 - Regression tests before skill promotion
 
