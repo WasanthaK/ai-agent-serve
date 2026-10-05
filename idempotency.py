@@ -162,6 +162,10 @@ def recover_incomplete_webhook_deliveries():
                       SELECT 1
                       FROM agent_requests AS ar
                       WHERE ar.id = wi.request_id
+                        AND (
+                            (wi.tenant_id IS NULL AND ar.tenant_id IS NULL)
+                            OR wi.tenant_id = ar.tenant_id
+                        )
                   )
                 """
             )
@@ -175,6 +179,10 @@ def recover_incomplete_webhook_deliveries():
                       SELECT 1
                       FROM agent_requests AS ar
                       WHERE ar.id = wi.request_id
+                        AND (
+                            (wi.tenant_id IS NULL AND ar.tenant_id IS NULL)
+                            OR wi.tenant_id = ar.tenant_id
+                        )
                   )
                 """
             )
