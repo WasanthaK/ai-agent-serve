@@ -62,6 +62,10 @@ from satisfaction_follow_up import (
     prepare_satisfaction_follow_up,
     record_satisfaction_response,
 )
+from review_request import (
+    get_review_request,
+    prepare_review_request,
+)
 
 
 def ready_analysis():
@@ -839,7 +843,7 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         response = record_satisfaction_response(
             request_id,
             UUID(follow_up["follow_up_id"]),
-            rating=4,
+            rating=1,
             responded_at=responded_at,
             response_source="operator-recorded phone response",
             comment="Service completed well.",
@@ -848,7 +852,7 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         response_retry = record_satisfaction_response(
             request_id,
             UUID(follow_up["follow_up_id"]),
-            rating=4,
+            rating=1,
             responded_at=responded_at,
             response_source="operator-recorded phone response",
             comment="Service completed well.",
@@ -860,7 +864,7 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             response["follow_up_id"],
         )
         self.assertEqual(response["status"], "responded")
-        self.assertEqual(response["rating"], 4)
+        self.assertEqual(response["rating"], 1)
         self.assertEqual(response["comment"], "Service completed well.")
         self.assertTrue(response["response_recorded"])
         self.assertFalse(response["sent"])
@@ -879,7 +883,7 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
 
         persisted_response = get_satisfaction_follow_up(request_id)
         self.assertEqual(persisted_response["status"], "responded")
-        self.assertEqual(persisted_response["rating"], 4)
+        self.assertEqual(persisted_response["rating"], 1)
 
         response_events = [
             event
@@ -888,7 +892,7 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             == "customer_satisfaction_response_recorded"
         ]
         self.assertEqual(len(response_events), 1)
-        self.assertEqual(response_events[0]["details"]["rating"], 4)
+        self.assertEqual(response_events[0]["details"]["rating"], 1)
         self.assertFalse(
             response_events[0]["details"]["review_request_created"]
         )
@@ -900,6 +904,58 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         )
         self.assertFalse(
             response_events[0]["details"]["external_action_performed"]
+        )
+
+        review_request = prepare_review_request(
+            request_id,
+            UUID(follow_up["follow_up_id"]),
+            reason="Operator approved preparing a public review request.",
+            actor="operator:ci",
+        )
+        review_retry = prepare_review_request(
+            request_id,
+            UUID(follow_up["follow_up_id"]),
+            reason="Operator approved preparing a public review request.",
+            actor="operator:ci",
+        )
+
+        self.assertEqual(
+            review_retry["review_request_id"],
+            review_request["review_request_id"],
+        )
+        self.assertEqual(review_request["status"], "prepared")
+        self.assertFalse(review_request["rating_gated"])
+        self.assertIsNone(review_request["target_platform"])
+        self.assertIsNone(review_request["target_url"])
+        self.assertIsNone(review_request["destination_channel"])
+        self.assertIsNone(review_request["destination_address"])
+        self.assertFalse(review_request["sent"])
+        self.assertFalse(review_request["external_action_performed"])
+
+        persisted_review = get_review_request(request_id)
+        self.assertEqual(
+            persisted_review["review_request_id"],
+            review_request["review_request_id"],
+        )
+
+        review_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"] == "public_review_request_prepared"
+        ]
+        self.assertEqual(len(review_events), 1)
+        self.assertEqual(
+            review_events[0]["details"]["satisfaction_rating"],
+            1,
+        )
+        self.assertFalse(review_events[0]["details"]["rating_gated"])
+        self.assertFalse(review_events[0]["details"]["target_resolved"])
+        self.assertFalse(
+            review_events[0]["details"]["destination_resolved"]
+        )
+        self.assertFalse(review_events[0]["details"]["sent"])
+        self.assertFalse(
+            review_events[0]["details"]["external_action_performed"]
         )
 
 
