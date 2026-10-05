@@ -304,9 +304,32 @@ Each training case is assigned a deterministic stage:
 - `accepted` — the human evaluation verdict was `pass`;
 - `needs_improvement_proposal` — a `needs_review` or `fail` evaluation has no proposal yet;
 - `needs_regression_test` — a proposal exists but regression evidence has not been recorded;
-- `regression_failed` — immutable regression evidence failed; revision is not yet supported; or
-- `ready_for_promotion_review` — the regression gate passed, but promotion is not yet supported.
+- `regression_failed` — the latest candidate failed regression and is eligible for an immutable human-authored revision; or
+- `ready_for_promotion_review` — the latest candidate passed the regression gate, but promotion is not yet supported.
 
-The access layer exposes only actions that already exist in the backend. It therefore advertises proposal creation and regression recording where valid, while explicitly blocking failed-regression revision and promotion until those capabilities are implemented.
+The access layer exposes only actions that already exist in the backend. It advertises proposal creation, regression recording, and failed-regression revision where valid, while explicitly blocking promotion until that capability is implemented.
 
 Access requires operator `read`. The projection is read-only and introduces no new mutation, model judge, training signal, prompt/policy activation, registry mutation, skill-version change, promotion, or production behaviour change.
+
+
+## Failed-regression revision path
+
+A failed regression result does not mutate or replace the original improvement proposal. Instead, an operator may create an immutable numbered revision that explicitly supersedes the exact failed regression record.
+
+Revision creation requires:
+
+- the exact request and original improvement-proposal IDs;
+- a failed regression result for the latest candidate;
+- no newer revision already awaiting regression evidence;
+- the currently registered skill version to still match the original proposal base version;
+- the current registered skill instructions to still match the original proposal instruction snapshot;
+- explicit revised change text and rationale; and
+- operator `decide`.
+
+Each failed candidate may be superseded by at most one revision. Exact retries are idempotent; different revision evidence for the same failed candidate fails closed.
+
+Regression evidence may then target the latest revision. A revision awaiting regression cannot be revised again. If its regression fails, another numbered revision may be created, preserving the full immutable chain.
+
+The training workspace exposes `create_improvement_revision` only for `regression_failed` cases. Once a revision is created, the case returns to `needs_regression_test`. A passing revised regression moves the case to `ready_for_promotion_review`.
+
+Revisions remain evidence only. This capability does not edit the original proposal, apply any instruction or policy change, mutate the live skill registry, increment a skill version, promote a skill, or change production behaviour.
