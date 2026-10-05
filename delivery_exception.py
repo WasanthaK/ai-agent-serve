@@ -87,6 +87,9 @@ def _validate_time(value, field_name):
 
 
 def _result(row):
+    intervention_created = bool(
+        row.get("human_intervention_created", False)
+    )
     return {
         "exception_id": str(row["id"]),
         "request_id": str(row["request_id"]),
@@ -99,7 +102,7 @@ def _result(row):
         "recorded_by": row["recorded_by"],
         "created_at": row["created_at"],
         "resolved": False,
-        "human_intervention_created": False,
+        "human_intervention_created": intervention_created,
         "notification_sent": False,
     }
 
@@ -110,10 +113,16 @@ def get_delivery_exceptions(request_id):
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT *
-                FROM service_delivery_exceptions
-                WHERE request_id = %s
-                ORDER BY occurred_at ASC, created_at ASC, id ASC
+                SELECT
+                    e.*,
+                    EXISTS (
+                        SELECT 1
+                        FROM service_delivery_interventions i
+                        WHERE i.exception_id = e.id
+                    ) AS human_intervention_created
+                FROM service_delivery_exceptions e
+                WHERE e.request_id = %s
+                ORDER BY e.occurred_at ASC, e.created_at ASC, e.id ASC
                 """,
                 (request_id,),
             )
@@ -205,10 +214,16 @@ def record_delivery_exception(
 
             cur.execute(
                 """
-                SELECT *
-                FROM service_delivery_exceptions
-                WHERE id = %s
-                FOR UPDATE
+                SELECT
+                    e.*,
+                    EXISTS (
+                        SELECT 1
+                        FROM service_delivery_interventions i
+                        WHERE i.exception_id = e.id
+                    ) AS human_intervention_created
+                FROM service_delivery_exceptions e
+                WHERE e.id = %s
+                FOR UPDATE OF e
                 """,
                 (exception_id,),
             )

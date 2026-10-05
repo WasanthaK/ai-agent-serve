@@ -743,6 +743,79 @@ class RouteAuthorizationTests(unittest.TestCase):
                 "operator:wasantha",
             )
 
+    def test_human_intervention_actions_require_decide_permission(self):
+        exception_id = uuid4()
+        intervention_id = uuid4()
+
+        create_payload = {
+            "exception_id": str(exception_id),
+            "priority": "high",
+            "reason": "Operator attention required",
+        }
+        acknowledge_payload = {
+            "intervention_id": str(intervention_id),
+            "reason": "Operator acknowledged intervention",
+        }
+
+        create_result = {
+            "intervention_id": str(intervention_id),
+            "request_id": str(self.request_id),
+            "status": "open",
+        }
+        acknowledge_result = {
+            "intervention_id": str(intervention_id),
+            "request_id": str(self.request_id),
+            "status": "acknowledged",
+        }
+
+        with patch.object(
+            api,
+            "create_human_intervention",
+            return_value=create_result,
+        ) as create:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/human-interventions",
+                json=create_payload,
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            create.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/human-interventions",
+                json=create_payload,
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                create.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
+        with patch.object(
+            api,
+            "acknowledge_human_intervention",
+            return_value=acknowledge_result,
+        ) as acknowledge:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/human-interventions/acknowledge",
+                json=acknowledge_payload,
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            acknowledge.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/human-interventions/acknowledge",
+                json=acknowledge_payload,
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                acknowledge.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)

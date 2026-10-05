@@ -535,6 +535,32 @@ This slice does not:
 - send any notification; or
 - perform any external action.
 
+## Human intervention queue
+
+A recorded delivery exception can be promoted into one explicit human-owned intervention item.
+
+Each exception may have at most one intervention item. Queue creation requires:
+
+- the same request and recorded exception;
+- active delivery state;
+- operator `decide`;
+- an explicit priority: `normal`, `high`, or `urgent`; and
+- an explicit human-authored reason.
+
+Intervention status begins as `open`. A separate operator-controlled acknowledgement transition moves it to `acknowledged` and records who acknowledged it, why, and when.
+
+Exact create and acknowledgement retries are idempotent. Conflicting evidence fails closed.
+
+Exception retrieval reflects persisted intervention existence rather than reporting a hard-coded false value.
+
+This slice does not:
+
+- resolve the underlying exception;
+- change request or delivery status;
+- send any notification;
+- dispatch work; or
+- perform any external action.
+
 ## Current exclusions
 
 This routing stage does not yet include:
@@ -604,3 +630,6 @@ The Phase 6 delivery-status PostgreSQL proof extends the governed flow through c
 
 
 The Phase 6 delivery-exception PostgreSQL proof records both a delay and an in-progress service issue, verifies UUID-based exact retry idempotency, preserves chronological retrieval, writes one audit event per unique exception, and proves no resolution/intervention/notification side effects.
+
+
+The Phase 6 human-intervention PostgreSQL proof creates one intervention from a persisted service issue, verifies exact retry identity, verifies the exception reports intervention creation, acknowledges the queue item exactly once, preserves audit events, and proves no exception-resolution/delivery-state/notification side effects.
