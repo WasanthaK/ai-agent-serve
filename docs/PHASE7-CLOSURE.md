@@ -333,3 +333,22 @@ Regression evidence may then target the latest revision. A revision awaiting reg
 The training workspace exposes `create_improvement_revision` only for `regression_failed` cases. Once a revision is created, the case returns to `needs_regression_test`. A passing revised regression moves the case to `ready_for_promotion_review`.
 
 Revisions remain evidence only. This capability does not edit the original proposal, apply any instruction or policy change, mutate the live skill registry, increment a skill version, promote a skill, or change production behaviour.
+
+
+## End-user Training / Skill Improvement console
+
+The Training console provides a lightweight operator-facing UI over the existing authenticated Phase 7 APIs.
+
+The HTML shell itself contains no customer, request, evaluation, proposal, regression, or credential data. Operators provide an existing API key at runtime. The page keeps that key only in JavaScript memory and sends it in the existing `X-API-Key` header; it is not written to URLs, cookies, `localStorage`, or `sessionStorage`.
+
+The console supports the actions already authorized by the backend:
+
+- review real-case request context, human evaluation, and factual outcome evidence;
+- create an improvement proposal for `needs_improvement_proposal`;
+- record bounded human-reviewed regression evidence for `needs_regression_test`;
+- create an immutable revision for `regression_failed`; and
+- view `accepted` and `ready_for_promotion_review` states.
+
+The UI does not add authority. All reads and writes continue to pass through the existing `read` and `decide` API permission checks. Promotion remains deliberately unavailable and is presented as a blocked future capability.
+
+The response uses no-store/no-referrer/frame-denial and a restrictive same-origin content-security policy so the operator console does not weaken the existing credential boundary.
