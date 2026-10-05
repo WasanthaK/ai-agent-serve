@@ -559,20 +559,29 @@ Completed training workspace access layer:
 - access requires operator `read`
 - no model-judge, promotion, registry, prompt, policy, or production authority was introduced
 
+Completed failed-regression revision path:
+
+- immutable numbered revisions implemented and CI-verified in PR #67
+- each revision links to the exact failed regression result it supersedes
+- only the latest candidate may receive new regression evidence
+- the original proposal and all prior failed evidence remain immutable
+- exact revision retries are idempotent and conflicting revisions fail closed
+- the training workspace exposes revision creation only from regression-failed cases
+- revised candidates return to regression testing and may become promotion-ready
+- no revision applies instructions/policy, mutates the registry, changes skill versions, promotes skills, or changes production behavior
+
 Current bounded work:
 
-- allow a failed regression candidate to be revised without mutating the original proposal or failed evidence
-- create immutable numbered revisions linked to the exact failed regression they supersede
-- permit regression evidence against the latest revision only
-- require current skill version and instructions to still match the original proposal base snapshot
-- make exact revision retries idempotent and conflicting revisions fail closed
-- expose revision creation only from the regression-failed training stage
-- preserve the complete proposal -> failed regression -> revision -> retest audit chain
-- do not apply revisions, mutate the registry, change skill versions, promote skills, or change production behavior
+- provide an end-user Training / Skill Improvement console over the existing protected training APIs
+- show real-case context, human evaluation, outcome evidence, proposal, latest revision and regression evidence
+- allow only backend-supported actions: create proposal, record regression evidence, create revision
+- keep promotion visibly unavailable until controlled promotion exists
+- require operators to provide an existing API key at runtime
+- keep credentials out of URLs, cookies and browser storage
+- do not embed business data or credentials in the public HTML shell
 
 Planned next:
 
-- End-user Training / Skill Improvement UI
 - Controlled skill promotion after passing regression evidence
 
 Production behaviour must never change solely because of unreviewed model output.
