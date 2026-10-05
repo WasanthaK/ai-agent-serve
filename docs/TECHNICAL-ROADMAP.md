@@ -2,19 +2,25 @@
 
 ## Product direction
 
-The project is evolving into an independent domain-expert agent platform that integrates with the existing Quixo / Quotes transactional platform through versioned service contracts.
+The project is evolving into an independent **Expert Agent Platform** shared by the Quixo product family.
 
 ### North star
 
-Build continuously learning domain-expert agents that understand real-world service requirements and operating conditions, identify uncertainty and risk, and transform that evidence into safe, predictable, commercially transactable proposals.
+Build continuously learning domain-expert agents that understand real-world service requirements and operating conditions, identify uncertainty and risk, and transform that evidence into safe, predictable, commercially actionable work scopes and proposals.
 
-The agent platform is responsible for expertise, reasoning, clarification, contextual intelligence and learning.
+The Expert Agent Platform owns expertise, reasoning, clarification, contextual intelligence, provenance and controlled learning.
 
-The `WasanthaK/quotes` platform is the authoritative system of record for commercial and operational transactions: service requests, providers, RFQs, quotations, approvals, awards, Engagement/job execution, inspections, deposits, variations, messaging and related transactional state.
+Quixo products retain their own transactional authority:
+- **SendQuote** — provider quotation workflow
+- **RequestQuote** — public/governed demand and RFQ workflow
+- **Marketplace** — sourcing/matching feeding RequestQuote and consuming expert intelligence
+- **Connectors/shared services** — widget, email, WhatsApp, voice, Messaging, Identity and other established platform capabilities
 
-The two systems intentionally remain separate so each can evolve, deploy and roll back independently.
+Future **Task Scheduler / Workforce / Service Delivery** is a separate product/project, not an agent submodule.
 
-Canonical architecture: `docs/AGENT-QUOTES-BOUNDARY.md`.
+Products and the Expert Agent remain separate so each can evolve, deploy and roll back independently behind versioned contracts.
+
+Canonical target architecture: `docs/AGENT-QUOTES-BOUNDARY.md`.
 
 ## Design principles
 
@@ -25,8 +31,8 @@ Every phase should preserve these principles:
 - Human approval is required for consequential or high-risk actions.
 - Skills are explicit, versioned and testable.
 - Tools are registered, state-aware and auditable.
-- Customer messages are stored before downstream AI processing.
-- Failures must not lose business events.
+- Canonical business messages remain owned by Quixo Messaging/product connectors; agent persistence is analysis/provenance evidence, not a competing conversation ledger.
+- Failures must not lose agent evidence or corrupt the owning product's business events.
 - External actions require authentication, authorization and an audit trail.
 - The Mac Mini remains a lightweight orchestration node.
 
@@ -168,6 +174,17 @@ Later adapters:
 - Social channels
 
 Channel adapters should translate messages into the common request format. They must not contain service-delivery reasoning themselves.
+
+## Architecture supersession notice — Phases 5–7
+
+**The implementation history below remains valid evidence of work completed, but its
+transactional ownership model is superseded by the product-family architecture in
+`docs/AGENT-QUOTES-BOUNDARY.md`.**
+
+Do not extend the local provider directory, RFQ, quote/award, delivery, closure or
+messaging modules as new production systems of record. Treat them as prototype,
+behavioural, safety and learning evidence until replaced by versioned integration
+contracts with the owning Quixo product.
 
 ## Phase 5 — Provider routing and quotations
 
@@ -612,9 +629,9 @@ Planned next after Phase 7:
 
 Production behaviour must never change solely because of unreviewed model output.
 
-## Phase 8 — Platform capabilities and Quotes integration
+## Phase 8 — Expert platform and Quixo product-family integration
 
-### Phase 8A — Multi-tenant access boundary
+### Phase 8A — Agent access boundary
 
 Completed:
 
@@ -623,147 +640,148 @@ Completed:
 - tenant-owned request ingress isolation — PR #72
 - downstream request-route isolation — PR #73
 
-These controls remain useful for protecting the agent platform itself.
+These controls protect the agent platform itself. They must not become a second
+Quixo business-tenancy model.
 
-They must not evolve into a second business tenancy model. Agent tenant identity will be mapped through explicit integration contracts to authoritative Quotes company/buyer context.
+The next integration contract must map explicit acting context rather than assuming
+one generic tenant id represents provider company, buyer organization and acting
+identity.
 
-### Architecture correction — commercial-domain ownership
+### Architecture correction — effective immediately
 
-Effective immediately:
+- freeze new authoritative provider/RFQ/quote/award/delivery/messaging domain expansion in `ai-agent-serve`
+- retain Phases 5–7 as prototype/reference and behavioural evidence
+- keep SendQuote, RequestQuote and Marketplace as independently authoritative products
+- keep Marketplace -> RequestQuote as the sourcing/request relationship
+- make Marketplace, RequestQuote and SendQuote first-class Expert Agent consumers
+- keep existing Messaging authoritative for communication
+- support agent invocation both before and after a canonical ServiceRequest/Quotation exists
+- use versioned API/event contracts only; no cross-database access or shared ORM entities
+- keep future Task Scheduler/Workforce as a separate product/project
 
-- freeze new authoritative provider/RFQ/quote/award/delivery domain development in `ai-agent-serve`
-- do not tenant-own the local provider directory as a new production source of truth
-- treat completed Phase 5/6/7 commercial workflow modules as prototype/reference behaviour unless explicitly retained for intelligence or learning
-- use Quotes and ProviderService APIs for authoritative provider/request/quote/job state
-- retain agent-local persistence only for agent provenance, reasoning, evaluation, learning, correlation and resilience
-- no cross-database access
-- no shared ORM/entity packages between repositories
+### Phase 8B — Requirement Intelligence Package
 
-See `docs/AGENT-QUOTES-BOUNDARY.md`.
+Define the price-neutral customer/request-side expert contract.
 
-### Phase 8B — Commercial Requirement Package
+It must represent:
 
-Define the independent, versioned output contract produced by expert agents.
-
-Required areas:
-
-- facts and customer objective
+- facts/customer objective
 - domain/subdomain
-- interpreted scope
-- work packages
-- materials/equipment concepts
-- labour concepts
-- known quantities
-- assumptions
-- exclusions
-- missing information
-- clarification questions
-- safety/compliance considerations
+- interpreted scope/work packages
+- materials/equipment and labour concepts
+- explicitly known quantities
+- missing information and clarification questions
+- assumptions/exclusions
+- safety/compliance
+- inspection requirement
 - environmental/context constraints
 - dependencies
-- pricing readiness
-- inspection requirement
-- commercial risk
-- confidence
-- recommended next action
-- skill/model/evidence provenance
+- readiness to request provider pricing
+- confidence/evidence provenance
 
-The contract must distinguish fact, inference, assumption, estimate and unknown.
+It must distinguish fact, inference, assumption, estimate and unknown and must not
+invent provider commercial prices.
 
-No Quotes mutation is part of the first contract slice.
+### Phase 8C — Commercial Proposal Package
 
-### Phase 8C — Quotes anti-corruption adapter
+Define the provider-side expert contract consumed by SendQuote/provider workflows.
 
-Build an explicit integration client between the agent and Quotes.
+It may add provider-context work breakdown, commercial structure, duration,
+assumptions/exclusions and clearly-labelled pricing suggestions/estimates where
+policy permits.
+
+Final prices, taxes, totals, approval and send remain authoritative in SendQuote and
+the permitted human/provider workflow.
+
+### Phase 8D — Quixo anti-corruption adapter
+
+Build one explicit `quixo_client` boundary.
 
 Rules:
 
-- versioned HTTP/event contracts only
+- versioned HTTP/event contracts
 - no direct database access
-- no dependency on Quotes table layout
-- service authentication and tenant/company/buyer context required
-- deterministic idempotency and correlation
-- bounded retries/timeouts
-- clear degraded-mode behavior
+- no dependency on Quixo table layout
+- explicit caller/product surface and acting authority context
+- deterministic idempotency/correlation
+- bounded retry/timeout behavior
+- graceful/manual fallback where appropriate
+- contract tests on both sides
 
-Prefer existing Quotes seams first, including canonical internal request intake and ProviderService internal lookup APIs.
+Migrate one embedded AI capability at a time using shadow/compare evidence rather
+than a big-bang replacement.
 
-### Phase 8D — Canonical identity/provenance linking
+### Phase 8E — Canonical reference/provenance linking
 
-Agent evidence may reference authoritative Quotes identifiers without owning their state.
+Agent evidence may reference authoritative Quixo identifiers without owning their
+state.
 
-Examples:
+Examples include ServiceRequest, Quotation and other owning-product identifiers
+where applicable.
 
-- Quotes ServiceRequest id/reference
-- Quotation id/version
-- RequestQuoteMatch/RFQ version evidence
-- Engagement id
+### Phase 8F — Outcome feedback into learning
 
-Persist those references only for provenance, learning and correlation.
-
-### Phase 8E — Outcome feedback into learning
-
-Consume factual transactional outcomes from Quotes and feed them into the existing human-controlled learning loop.
+Consume factual corrections and outcomes from the owning product.
 
 Priority evidence:
 
-- provider correction to interpreted scope
+- provider corrections to scope
 - clarification deltas
 - quote revisions
-- accepted/awarded proposal
-- execution exceptions
-- work completion
-- customer confirmation/satisfaction where permitted
+- acceptance/award outcome
+- execution/outcome evidence where a product exposes it
+- customer/provider feedback where permitted
 
-No transactional outcome automatically changes a skill. Promotion remains regression-gated and human-controlled.
+No outcome automatically promotes a skill.
 
-### Phase 8F — Context intelligence
+### Phase 8G — Context intelligence
 
-Add pluggable external-context providers selected by domain skill.
+Add pluggable external context providers selected by domain skill.
 
 Examples:
 
-- weather/severe-weather warnings
-- rain
-- wind/gusts
+- severe weather
+- rain/wind/gusts
 - temperature/humidity
 - UV/heat
 - flood/fire
-- tides
-- daylight
+- tides/daylight
 - traffic/access
 - air quality
 - seasonal conditions
 - future site sensors
 
-Context modifies recommendations and risk evidence only. Deterministic policy decides whether it is informational, review-required, rescheduling-recommended or safety-escalated.
+Context changes recommendations/risk evidence only. Deterministic policy decides
+whether it is informational, clarification-required, review-required,
+rescheduling-recommended or safety-escalated.
 
-Initial proof: one outdoor-work skill using weather/environmental context.
+Initial proof: one outdoor-work expert skill using weather/environmental context.
 
 ### Remaining platform capabilities
 
-- tenant-specific skill/policy overlays
-- role-based agent access control
+- domain/tenant-specific skill overlays
+- role-based expert access
 - usage accounting
-- regional data/retention controls
+- regional retention/privacy controls
 - public integration API
 - MCP integration
-- private deployment options
+- private deployment
 - optional local GPU inference
 
-## Initial skill catalogue
+## Target expert capability catalogue
 
-| Skill | Responsibility | Likely tools |
-|---|---|---|
-| Request intake | Classify intent, category and urgency | Request storage |
-| Request clarification | Identify essential missing information | Follow-up preparation |
-| Safety triage | Detect hazards and enforce escalation | Human-review queue |
-| Customer communication | Produce channel-appropriate messages | Email, WhatsApp, SMS |
-| Provider routing | Identify and explain suitable approved provider candidates | Provider directory |
-| Quote preparation | Create a normalized RFQ | Quotation service |
-| Quote evaluation | Compare provider responses | Evaluation records |
-| Delivery coordination | Manage appointments and exceptions | Calendar, messaging |
-| Service closure | Confirm outcome and request feedback | Review and survey tools |
+| Capability | Expert Agent responsibility |
+|---|---|
+| Requirement understanding | Interpret messy customer/provider intent and domain context |
+| Domain expert scoping | Build professional, domain-specific work scope and work packages |
+| Clarification intelligence | Ask the smallest/highest-value questions needed to reduce uncertainty |
+| Safety & compliance intelligence | Detect hazards, constraints and review/escalation needs |
+| Inspection intelligence | Decide when remote understanding is insufficient for reliable commercialisation |
+| Context intelligence | Interpret weather/environment/site factors relevant to the domain |
+| Commercial readiness | Assess whether evidence is sufficient to request pricing or prepare a provider proposal |
+| Proposal structuring | Produce provider-reviewable commercial structure without taking transactional authority |
+| Quote intelligence | Explain/compare factual proposal evidence without selecting or awarding |
+| Outcome learning | Learn from human/provider corrections and factual downstream outcomes |
 
 ## Definition of done for every capability
 
