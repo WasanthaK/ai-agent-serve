@@ -1336,6 +1336,7 @@ class RouteAuthorizationTests(unittest.TestCase):
                 stage="needs_regression_test",
                 skill_name=None,
                 limit=25,
+                tenant_id=None,
             )
             self.assertTrue(allowed.json()["promotion_supported"])
 
@@ -1349,7 +1350,10 @@ class RouteAuthorizationTests(unittest.TestCase):
                 headers={"X-API-Key": VIEWER_KEY},
             )
             self.assertEqual(allowed.status_code, 200)
-            retrieve.assert_called_once_with(evaluation_id)
+            retrieve.assert_called_once_with(
+                evaluation_id,
+                tenant_id=None,
+            )
 
     def test_skill_promotion_requires_decide_permission(self):
         regression_test_id = uuid4()
@@ -1521,7 +1525,11 @@ class RouteAuthorizationTests(unittest.TestCase):
                         )
                     self.assertEqual(response.status_code, 404)
                 elif path.startswith("/requests/") or path.endswith("/reply"):
-                    with patch.object(api, "get_request", return_value=None):
+                    with patch.object(
+                        api,
+                        "_tenant_scoped_get_request",
+                        return_value=None,
+                    ):
                         response = self.client.request(
                             method,
                             path,
@@ -1559,7 +1567,7 @@ class RouteAuthorizationTests(unittest.TestCase):
             "source": "website", "status": "needs_information",
             "message": "A leaking tap", "customer_name": "Test",
         }
-        with patch.object(api, "get_request", return_value=owned), \
+        with patch.object(api, "_tenant_scoped_get_request", return_value=owned), \
              patch.object(api, "save_message", return_value={"message": "More info"}) as save, \
              patch.object(api, "get_request_messages", return_value=[]), \
              patch.object(api, "analyze_quote_request", return_value={"category": "plumbing"}), \
@@ -1572,14 +1580,14 @@ class RouteAuthorizationTests(unittest.TestCase):
 
         for request in (None, {**owned, "source": "other-channel"}):
             with self.subTest(request=request), \
-                 patch.object(api, "get_request", return_value=request), \
+                 patch.object(api, "_tenant_scoped_get_request", return_value=request), \
                  patch.object(api, "save_message") as save:
                 response = self.client.post(path, json={"message": "More info"},
                     headers={"X-API-Key": INBOUND_KEY})
                 self.assertEqual(response.status_code, 404)
                 save.assert_not_called()
 
-        with patch.object(api, "get_request", return_value=owned), \
+        with patch.object(api, "_tenant_scoped_get_request", return_value=owned), \
              patch.object(api, "save_message") as save:
             response = self.client.post(path,
                 json={"message": "More info", "channel": "other-channel"},
@@ -1587,8 +1595,11 @@ class RouteAuthorizationTests(unittest.TestCase):
             self.assertEqual(response.status_code, 403)
             save.assert_not_called()
 
-        with patch.object(api, "get_request", return_value={**owned, "status": "ready"}), \
-             patch.object(api, "save_message") as save:
+        with patch.object(
+             api,
+             "_tenant_scoped_get_request",
+             return_value={**owned, "status": "ready"},
+        ), patch.object(api, "save_message") as save:
             response = self.client.post(path, json={"message": "Late reply"},
                 headers={"X-API-Key": INBOUND_KEY})
             self.assertEqual(response.status_code, 409)
