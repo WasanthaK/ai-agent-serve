@@ -630,6 +630,78 @@ class RouteAuthorizationTests(unittest.TestCase):
                 "operator:wasantha",
             )
 
+    def test_delivery_status_actions_require_decide_permission(self):
+        appointment_id = uuid4()
+        delivery_status_id = uuid4()
+
+        schedule_payload = {
+            "appointment_id": str(appointment_id),
+            "reason": "Human scheduled service delivery",
+        }
+        start_payload = {
+            "delivery_status_id": str(delivery_status_id),
+            "reason": "Human confirmed work has started",
+        }
+
+        schedule_result = {
+            "delivery_status_id": str(delivery_status_id),
+            "request_id": str(self.request_id),
+            "status": "scheduled",
+        }
+        start_result = {
+            "delivery_status_id": str(delivery_status_id),
+            "request_id": str(self.request_id),
+            "status": "in_progress",
+        }
+
+        with patch.object(
+            api,
+            "initialize_delivery_status",
+            return_value=schedule_result,
+        ) as schedule:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/delivery-status/schedule",
+                json=schedule_payload,
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            schedule.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/delivery-status/schedule",
+                json=schedule_payload,
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                schedule.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
+        with patch.object(
+            api,
+            "start_delivery",
+            return_value=start_result,
+        ) as start:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/delivery-status/start",
+                json=start_payload,
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            start.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/delivery-status/start",
+                json=start_payload,
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                start.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)
