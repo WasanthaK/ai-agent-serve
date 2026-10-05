@@ -1,87 +1,339 @@
-# Agent ↔ Quotes Bounded-Context Architecture
+# Expert Agent Platform ↔ Quixo Product Family Architecture
+
+> Canonical target architecture for `ai-agent-serve`.
+>
+> This document describes the intended product-family boundary after reconciling the
+> agent roadmap with the current Quixo `quotes/dev` canonical documents. Existing
+> runtime paths in this repository may still reflect earlier prototype ownership;
+> those paths are preserved until deliberately migrated.
 
 ## North star
 
-Build domain-expert agents that understand real-world service requirements, account for operating context, identify uncertainty and risk, and transform that evidence into a transaction-ready commercial proposal.
+Build continuously learning domain-expert agents that understand messy real-world
+service requirements, operating context, uncertainty and risk, and turn that
+evidence into commercially actionable work scopes and proposals.
 
-The agent must become exceptionally good at interpretation, scoping, clarification, domain expertise, contextual reasoning and learning.
+The Expert Agent Platform is a shared intelligence capability. It is **not** a new
+transactional product, a replacement for SendQuote/RequestQuote/Marketplace, or a
+mandatory gateway through which every Quixo request must pass.
 
-The Quotes platform remains authoritative for commercial and operational transactions.
+## Quixo product family
 
-## Why this boundary exists
+The current product family should be understood as distinct products/capabilities
+that collaborate through explicit contracts.
 
-The Quotes repository already contains mature, authoritative implementations for:
+### SendQuote
 
-- ServiceRequest and governed buyer request ownership
-- provider identity, provider lookup and provider service areas
-- provider matching and request-provider match records
-- RFQ specification/version history
-- RequestQuoteMatch and quotation lineage
-- quote approval, acceptance and award
-- governed buyer/provider clarification
-- Engagement/job execution
-- scheduling, assignment, start/completion/cancellation
-- inspections
-- deposit requests
-- variations/change orders
-- provider permissions and provider-facing UI
-- messaging and channel delivery
+Provider-facing quotation product.
 
-The agent server must not create a second source of truth for those capabilities.
+Owns the provider's transactional quote workflow, including provider review,
+commercial values, server-authoritative totals, quote revision/approval and send
+authority.
 
-Completed Phase 5–7 commercial-domain modules in this repository remain useful as prototype, safety, testing and architectural evidence. They are not the future system of record.
+SendQuote already contains basic AI capabilities. Those capabilities should be
+progressively delegated to the Expert Agent Platform where the expert service adds
+value; they do not need to be removed in one migration.
 
-## Bounded contexts
+### RequestQuote
 
-### Agent platform owns
+Demand/customer/buyer-side product.
 
-The agent platform is authoritative for intelligence and learning:
+Owns public and governed request/RFQ journeys, request identity, buyer context,
+clarifications, response collection, comparison surfaces and acceptance/award
+authority according to the existing product rules.
+
+### Marketplace
+
+Sourcing/matching capability.
+
+Marketplace **feeds RequestQuote demand/sourcing flows** and is also a first-class
+consumer of the Expert Agent Platform for richer request understanding, domain
+classification, matching context, risk/context interpretation and explainable
+provider-fit evidence.
+
+Marketplace is not the owner of the expert reasoning engine and the agent is not
+the owner of Marketplace transactional state.
+
+### Connectors
+
+Examples:
+
+- web widget
+- email parser/intake
+- WhatsApp parser/intake
+- voice
+- webhook/API intake
+- future external marketplaces/channels
+
+Connectors deliver demand or provider-side input into the appropriate Quixo
+product. They may invoke the Expert Agent **before** a canonical ServiceRequest or
+Quotation exists when intelligence is needed during conversational/intake capture.
+
+They should not create a second commercial workflow inside the agent.
+
+### Shared platform services
+
+Existing platform services such as Messaging, Identity, catalogue/category
+services, notifications and other shared infrastructure retain their existing
+authority.
+
+In particular, **Messaging remains the authoritative communication platform**.
+The Expert Agent may consume message content and return drafts/analysis, but it
+must not become a second messaging system or canonical conversation ledger.
+
+### Expert Agent Platform
+
+Independent shared intelligence service consumed by SendQuote, RequestQuote,
+Marketplace and selected connectors.
+
+It owns:
 
 - requirement interpretation
-- intent/domain/subdomain classification
+- domain/subdomain expertise
 - expert scoping
 - missing-information detection
 - clarification strategy
-- domain-specific safety escalation
+- safety/compliance intelligence
 - assumptions and exclusions
 - work-breakdown reasoning
-- commercial-readiness assessment
+- inspection/readiness reasoning
 - confidence and uncertainty representation
 - environmental/context intelligence
-- proposal drafting assistance
+- proposal-structure intelligence
 - model/skill provenance
-- skill versions and domain skill packs
-- human-reviewed real-case evaluations
+- domain skill packs and versions
+- human-reviewed evaluations
 - improvement proposals
 - regression suites
 - controlled skill promotion
-- agent-specific telemetry and audit evidence
+- agent-specific telemetry/audit evidence
 
-### Quotes owns
+It does **not** own the authoritative commercial transaction.
 
-Quotes is authoritative for transactional state:
+### Future Task Scheduler / Workforce / Service Delivery
 
-- customers and provider companies
-- buyer organisations
-- ServiceRequest
-- provider directory/profile/service areas
-- provider matching
-- RFQ lifecycle and immutable request versions
-- quotations and RequestQuoteMatch
-- approvals/rejections
-- acceptance and award
-- Engagement/job lifecycle
-- inspections
-- deposits
-- variations/change orders
-- commercial messages and customer/provider communication
-- billing/payment transaction state
-- provider permissions
-- transactional UI
+Task scheduling, workforce/resource management and deeper service-delivery
+execution will be developed as a **separate product and project**, not hidden inside
+SendQuote, RequestQuote or the Expert Agent Platform.
+
+A future Task Scheduler may own concepts such as:
+
+- jobs/tasks
+- technician/staff assignment
+- availability/capacity
+- shifts
+- routing/travel
+- skills/certifications
+- calendars
+- dependencies
+- execution evidence
+- workforce operations
+
+The Expert Agent may support that future product with expert advice such as job
+requirements, technician-skill fit, weather risk or readiness checks, but it will
+not own scheduler/workforce state.
+
+## 35,000-foot product topology
+
+```text
+              QUIXO PRODUCT FAMILY
+
+       Connectors / Intake Channels
+  Web | Widget | Email | WhatsApp | Voice | API
+                    |
+          +---------+---------+
+          |                   |
+          v                   v
+     RequestQuote         SendQuote
+          ^                   ^
+          |                   |
+      Marketplace             |
+          ^                   |
+          |                   |
+          +---------+---------+
+                    |
+                    v
+          EXPERT AGENT PLATFORM
+      shared intelligence / learning
+
+Relationships:
+- Marketplace -> RequestQuote for sourcing/request flow.
+- Marketplace <-> Expert Agent for matching/request intelligence.
+- RequestQuote <-> Expert Agent for requirement intelligence.
+- SendQuote <-> Expert Agent for provider/proposal intelligence.
+- Connectors may call the Expert Agent during intake and then persist through
+  the appropriate Quixo product.
+- Future Task Scheduler/Workforce is a separate product that may also consume
+  Expert Agent intelligence through versioned contracts.
+```
+
+Arrows represent product collaboration, not database ownership.
+
+## Invocation patterns
+
+The Expert Agent must support both patterns.
+
+### 1. Pre-canonical-record intelligence
+
+Useful for voice, widget, email/WhatsApp parsing and conversational capture.
+
+```text
+Customer/provider input
+  -> connector or Quixo UI
+  -> Expert Agent
+  -> validated intelligence package
+  -> Quixo product creates/updates its canonical record
+```
+
+The agent therefore must **not require a ServiceRequest to exist before it can
+reason**.
+
+### 2. Post-canonical-record intelligence
+
+Useful for deeper expert analysis of an existing request or quote.
+
+```text
+Canonical Quixo record
+  -> Expert Agent with stable external reference + allowed context
+  -> clarification/scope/risk/proposal intelligence
+  -> reviewed result applied through a permitted Quixo API
+```
+
+## Two-stage expert outputs
+
+A single universal "commercial requirement" output would conflict with the
+existing RequestQuote rule that customer-side intake must not invent provider
+pricing. The target architecture therefore uses two related contracts.
+
+### Requirement Intelligence Package
+
+Customer/request-side, price-neutral expert output.
+
+Typical fields:
+
+- schema version
+- skill/domain version
+- source/correlation reference
+- domain/subdomain
+- customer objective
+- interpreted requirement
+- site/job context
+- structured scope concepts
+- work packages
+- materials/equipment concepts
+- labour concepts
+- quantities explicitly known
+- missing information
+- clarification questions
+- assumptions
+- exclusions
+- safety/compliance considerations
+- inspection requirement
+- environmental/context constraints
+- dependencies/prerequisites
+- readiness to request provider pricing
+- confidence by section
+- evidence/provenance
+
+It must not fabricate provider prices or turn an estimate into a commercial
+commitment.
+
+### Commercial Proposal Package
+
+Provider-side intelligence used when a provider/SendQuote context exists.
+
+May add:
+
+- provider-context work breakdown
+- proposed billable structure
+- material/labour grouping
+- commercial assumptions/exclusions
+- duration/timeframe suggestions
+- provider-reviewable pricing inputs or estimates **only where policy permits**
+- uncertainty around those estimates
+- proposal risks
+- validity/readiness guidance
+
+Final commercial values, taxes, totals, approval and sending remain authoritative
+in SendQuote/Quotes and with the permitted human/provider workflow.
+
+## Evidence semantics
+
+Expert outputs must distinguish:
+
+- supplied fact
+- authoritative platform fact
+- expert inference
+- assumption
+- estimate
+- unknown/missing information
+- safety-critical uncertainty
+
+This distinction must survive adapter translation.
+
+## Context intelligence
+
+Domain skills may declare relevant external context sources, for example:
+
+- severe-weather warnings
+- rain
+- wind/gusts
+- temperature/humidity
+- UV/heat
+- flood/fire alerts
+- tides
+- daylight
+- traffic/access
+- air quality
+- seasonal conditions
+- future site sensors
+
+Context informs risk and recommendations. It must not silently change commercial
+commitments, schedules or workforce assignments.
+
+Deterministic policy decides whether evidence is:
+
+- informational
+- clarification-required
+- provider-review-required
+- rescheduling-recommended
+- safety-escalated / stop-work-review-required
+
+## Messaging boundary
+
+Quixo Messaging/product connector infrastructure owns business communication
+delivery and the canonical conversation/message record.
+
+The agent may persist only what it needs for:
+
+- model/skill provenance
+- analysis reproducibility
+- correlation
+- evaluation/learning
+- bounded retry/recovery
+
+Agent-local message/request rows from the prototype must not become a competing
+business conversation source of truth.
+
+## Product/identity context
+
+One generic agent tenant identifier is not enough to represent every Quixo
+authority context.
+
+Cross-system calls should carry an explicit acting context such as:
+
+- provider company id, when applicable
+- buyer organization id, when applicable
+- acting identity user id, when applicable
+- public/direct customer reference or token scope, when applicable
+- product surface / interaction mode
+- canonical ServiceRequest/Quotation reference when one exists
+
+The adapter must not infer one authority from another.
 
 ## Independence boundary
 
-The two systems must remain independently evolvable.
+The Expert Agent and Quixo products must remain independently evolvable.
 
 Rules:
 
@@ -89,340 +341,187 @@ Rules:
 2. Separate databases.
 3. Separate migrations.
 4. Separate deployment and rollback cycles.
-5. No shared ORM entities or database schemas.
-6. No direct database reads/writes across service boundaries.
-7. No agent dependency on Quotes internal table layouts.
-8. No Quotes dependency on agent persistence layout.
-9. Integration only through versioned API/event contracts.
-10. Correlation uses stable external identifiers, not shared primary-key ownership.
-11. Either side may temporarily be unavailable without corrupting the other's authoritative state.
-12. Agent recommendations never mutate Quotes without an explicit permitted API action.
-13. Consequential commercial actions continue to require deterministic authority and human approval where policy requires it.
+5. No shared ORM entities/database schemas.
+6. No direct cross-database reads or writes.
+7. No dependency on another product's table layout.
+8. Integration only through versioned API/event contracts.
+9. Stable external identifiers are references, not transferred ownership.
+10. Either side may be unavailable without corrupting the other's authoritative state.
+11. Agent recommendations mutate product state only through explicitly permitted APIs.
+12. Consequential commercial actions remain deterministic/human-controlled per product policy.
+13. Contract tests protect both sides from accidental coupling.
 
-This is an anti-corruption boundary: the agent speaks its own expert proposal contract and a dedicated adapter translates that contract to and from Quotes APIs.
+This is the safe distance: independent implementation behind stable contracts.
 
-## Canonical flow
+## Existing Quixo AI: migration posture
 
-```text
-Customer / Provider requirement
-        |
-        v
-Existing Quotes Messaging / UI / Connector surfaces
-        |
-        v
-Canonical Quotes ServiceRequest identity
-        |
-        +------------------------------+
-        |                              |
-        v                              |
-Agent intelligence API                 |
-- interpret                            |
-- classify domain                      |
-- assess context                       |
-- ask clarifications                   |
-- build scope                          |
-- identify risk                        |
-- assess pricing readiness             |
-- produce Commercial Requirement Package
-        |
-        v
-Human/provider review where required
-        |
-        v
-Quotes integration adapter
-        |
-        v
-Quotes authoritative APIs
-- request/RFQ
-- quotation
-- approval
-- award
-- Engagement
-- downstream execution
-        |
-        v
-Outcome/evidence events
-        |
-        v
-Agent evaluation + controlled learning
-```
+Quixo already contains useful embedded AI/extraction paths, including
+RequestQuote voice/intake, quote extraction, requirement-to-quote assistance and
+connector parsing.
 
-## Commercial Requirement Package
+Do not perform a big-bang replacement.
 
-The core agent output should evolve toward a stable, versioned contract independent of Quotes storage.
+Use a strangler/delegation approach:
 
-Suggested contract areas:
+1. define the expert contract;
+2. add an adapter/client in the calling Quixo product;
+3. run the Expert Agent in shadow/compare mode where useful;
+4. prove parity or improvement;
+5. switch one bounded capability;
+6. retain a graceful/manual fallback;
+7. remove old embedded logic only after evidence and explicit cleanup.
 
-- contract/schema version
-- agent skill/domain version
-- source request reference
-- domain and subdomain
-- customer objective
-- interpreted requirement
-- site/job context
-- structured scope of work
-- materials/equipment concepts
-- labour/work-package concepts
-- quantities explicitly known
-- explicit assumptions
-- explicit exclusions
-- missing information
-- clarification questions
-- safety/compliance considerations
-- environmental/context constraints
-- dependencies/prerequisites
-- pricing-readiness state
-- inspection-required state
-- commercial risks
-- confidence by section
-- recommended next action
-- evidence/provenance references
+This keeps SendQuote/RequestQuote/Marketplace independently releasable while the
+expert engine improves rapidly.
 
-The contract must distinguish:
+## Existing agent modules
 
-- facts supplied by the customer/system
-- expert inference
-- assumptions
-- estimates
-- missing information
-- safety-critical uncertainty
-
-## Context intelligence
-
-Domain skills may declare relevant external context sources.
-
-Examples:
-
-- weather and severe-weather warnings
-- rainfall probability
-- wind/gusts
-- temperature/humidity
-- UV/heat
-- flood/fire warnings
-- tides
-- daylight
-- traffic/access constraints
-- air quality
-- seasonal conditions
-- site sensor data in future
-
-Context data informs recommendations and risk. It must not silently create or change transactional commitments.
-
-A deterministic policy layer decides whether context is:
-
-- informational
-- requires provider review
-- requires customer clarification
-- requires rescheduling recommendation
-- requires safety escalation / stop-work review
-
-## Learning loop
-
-Target learning loop:
-
-```text
-real requirement
- -> agent interpretation
- -> provider corrections
- -> accepted commercial proposal
- -> service execution
- -> actual outcome
- -> human evaluation
- -> skill improvement proposal
- -> regression suite
- -> human promotion
- -> new skill version
-```
-
-Provider corrections are particularly valuable training evidence because they reveal domain-expert deltas between agent interpretation and real commercial practice.
-
-## Integration seams already present in Quotes
-
-The current Quotes codebase already exposes useful boundaries that should be preferred over duplicate persistence:
-
-- `POST /api/v1/quotes/internal/requests`
-  - service-to-service connector intake
-  - creates canonical ServiceRequest
-  - deterministic idempotency
-- `GET /api/v1/providers/internal/search`
-  - internal provider lookup
-- `GET /api/v1/providers/internal/company/{companyId}`
-  - authoritative provider lookup
-
-Quotes also already owns ServiceRequest, RequestProviderMatch, ServiceRequestVersion, RequestQuoteMatch, Quotation and Engagement.
-
-Future agent integration should consume or extend versioned Quotes APIs around these authoritative aggregates rather than reproduce them in Python.
-
-## Migration posture for existing agent modules
-
-Do not delete completed work immediately.
-
-Classify modules into three groups.
+Completed Phase 5-7 commercial-domain work is preserved as historical/prototype,
+safety and behavioural evidence. It no longer defines production ownership.
 
 ### Keep and deepen
 
-- skills / skill registry
+- skill registry
 - domain service catalogue
-- request interpretation
-- clarification
+- requirement interpretation
+- clarification intelligence
 - safety triage
 - human review
-- model/skill provenance
-- evaluation / training / regression / promotion
-- agent observability
-- tenant/auth boundary needed for agent access
-- contextual intelligence
-- Commercial Requirement Package
+- provenance
+- evaluation/training/regression/promotion
+- observability
+- agent access/auth boundary
+- context intelligence
+- Requirement Intelligence Package
+- Commercial Proposal Package
 
-### Adapt into integration clients
+### Adapt into integration/projection clients
 
 - request persistence entry paths
-- provider lookup
-- provider matching evidence
-- RFQ preparation
-- quote normalization/comparison
-- delivery/outcome retrieval
+- provider lookup/matching evidence
+- RFQ/proposal preparation
+- quote comparison intelligence
+- outcome/evidence retrieval
 
-These should become clients/projections over Quotes rather than independent authoritative stores.
+### Freeze as authoritative production domains
 
-### Freeze as prototype/reference authority
+Do not extend as competing systems of record:
 
-Until replaced by integration contracts, do not extend:
+- local provider directory/eligibility
+- provider invitation/onboarding
+- RFQ handoff transaction state
+- normalized quote ledger
+- quote recommendation/award transaction state
+- appointment/delivery execution state
+- closure transaction state
+- duplicate messaging/channel delivery
 
-- local provider directory
-- local provider eligibility source of truth
-- local provider invitation/onboarding
-- local RFQ handoff authority
-- local normalized quote authority
-- local quote recommendation/award transaction state
-- local delivery/appointment execution state
-- local closure transaction state
+Historical tests remain useful behavioural specifications.
 
-Historical tests remain valuable as behavioural specifications.
+## Integration seams already present
 
-## Safe-distance deployment model
+Useful current seams in Quixo include, among others:
 
-The preferred deployment model is not an embedded Python library inside Quotes.
+- `POST /api/v1/quotes/internal/requests`
+- `GET /api/v1/providers/internal/search`
+- `GET /api/v1/providers/internal/company/{companyId}`
 
-Instead:
+These are starting points, not permission to couple to internal database models.
+Additional versioned expert-facing APIs may be required.
+
+## Learning loop
+
+Target loop:
 
 ```text
-Quotes
-  <---- versioned HTTPS / event contracts ---->
-Agent Service
+real requirement
+ -> expert interpretation
+ -> human/provider correction
+ -> commercial proposal/quote outcome
+ -> service/outcome evidence from the owning product
+ -> human evaluation
+ -> skill improvement proposal
+ -> regression
+ -> human-controlled promotion
+ -> new skill version
 ```
 
-Advantages:
-
-- agent can upgrade models and skills independently
-- Quotes can evolve transactional workflows independently
-- agent can run locally/private/cloud without forcing Quotes migration
-- failures are isolated
-- contract tests reveal incompatibility before deployment
-- rollback is independent
-- multiple agent implementations can eventually target the same Quotes contract
-- Quotes can operate in degraded/manual mode if the agent is unavailable
+No product outcome automatically changes production skill behaviour.
 
 ## Contract discipline
 
 Every cross-system contract must define:
 
 - version
+- caller/product surface
 - authentication
-- tenant/company/buyer context
+- acting company/buyer/user/public context
 - idempotency
-- correlation identifiers
-- timeout/retry policy
+- correlation/reference identifiers
+- timeout/retry behavior
 - error semantics
-- data-classification/privacy rules
-- authority boundaries
-- backward-compatibility window
-- contract tests on both repositories
-
-No integration may rely on undocumented database behavior.
+- privacy/data classification
+- authority boundary
+- backward compatibility window
+- contract tests
 
 ## Immediate implementation sequence
 
-### A1 — Architecture freeze and contract inventory
+### A1 — Product-family contract inventory
 
-- mark duplicate commercial-domain expansion frozen
-- inventory existing Quotes APIs needed by the agent
-- classify each current agent commercial module as keep/adapt/freeze
-- document identifier mapping between agent tenant context and Quotes company/buyer context
+- freeze duplicate commercial ownership expansion
+- inventory current AI/extraction entry points in SendQuote, RequestQuote,
+  Marketplace and connectors
+- inventory existing Quixo APIs/events usable by the expert platform
+- classify current agent modules as keep/adapt/freeze
+- define explicit acting-context/identifier mapping
 
-### A2 — Commercial Requirement Package v1
+### A2 — Requirement Intelligence Package v1
 
-Define and test the agent's independent proposal contract.
+Define/test the price-neutral customer/request-side expert contract.
 
-Start with:
+No product mutation.
 
-- requirement understanding
-- domain/subdomain
-- scope
-- missing information
-- clarifications
-- assumptions
-- exclusions
-- safety/compliance
-- context/environmental constraints
-- pricing readiness
-- confidence
-- recommended next action
+### A3 — Commercial Proposal Package v1
 
-No Quotes mutation in this slice.
+Define/test the provider-side expert proposal contract with explicit estimate versus
+authoritative-price semantics.
 
-### A3 — Quotes integration adapter
+No autonomous send/approval.
 
-Create an explicit `quotes_client` / anti-corruption layer.
+### A4 — Quixo integration adapter
 
-Initial read/write seams:
+Create an anti-corruption `quixo_client` boundary rather than product-specific
+database coupling.
 
-- canonical request lookup/intake
-- provider/company lookup only where expert reasoning needs it
-- commercial proposal handoff/draft creation through approved Quotes API contracts
+Initial consumers can be migrated one bounded path at a time.
 
-No direct database access.
+### A5 — Canonical reference/provenance linking
 
-### A4 — Canonical identity linking
+Persist only stable external references needed for reproducibility and learning.
 
-Persist only cross-system references needed for provenance:
+### A6 — Outcome feedback contract
 
-- agent analysis/evaluation id
-- Quotes ServiceRequest id/reference
-- Quotes Quotation id where applicable
-- Quotes Engagement id where applicable
+Consume factual corrections and outcomes from the owning Quixo product.
 
-Quotes remains owner of those identifiers and state.
+### A7 — Context intelligence
 
-### A5 — Outcome feedback contract
-
-Read factual outcome evidence from Quotes:
-
-- provider corrections
-- quote revisions
-- award/acceptance
-- service execution outcome
-- exceptions
-- customer confirmation/satisfaction where permitted
-
-Feed this to the existing controlled learning loop.
-
-### A6 — Context intelligence
-
-Add pluggable context providers and domain policies.
-
-First outdoor-work proof should use weather/environmental evidence but remain recommendation-only until deterministic thresholds and human review rules are defined.
+First proof: one outdoor-work domain skill with weather/environmental evidence,
+recommendation-only until deterministic policy thresholds are defined.
 
 ## Explicit non-goals
 
-The agent platform will not become:
+The Expert Agent Platform will not become:
 
+- SendQuote
+- RequestQuote
+- Marketplace
 - a replacement provider database
-- a second RFQ system
-- a second quotation ledger
-- a second Engagement/job-management system
 - a second messaging platform
+- a quotation ledger
 - a payment/accounting authority
+- Task Scheduler/workforce management
 - an autonomous commercial decision-maker
 
-Its job is to become the best domain-expert intelligence layer feeding a robust transactional platform.
+Its job is to become the best reusable domain-expert intelligence layer in the
+Quixo product family.
