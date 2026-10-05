@@ -230,6 +230,7 @@ from training_workspace import (
     get_training_case,
     list_training_cases,
 )
+from training_ui import training_ui_response
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -737,6 +738,11 @@ def record_request_satisfaction_response(
         SatisfactionFollowUpConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/training", include_in_schema=False)
+def training_console():
+    return training_ui_response()
 
 
 @app.get(
