@@ -222,6 +222,11 @@ def _result(row):
         "regression_test_id": str(row["id"]),
         "request_id": str(row["request_id"]),
         "proposal_id": str(row["proposal_id"]),
+        "revision_id": (
+            str(row["revision_id"])
+            if row.get("revision_id") is not None
+            else None
+        ),
         "skill_name": row["skill_name"],
         "base_skill_version": row["base_skill_version"],
         "change_scope": row["change_scope"],
@@ -265,6 +270,7 @@ def record_skill_regression_test(
     request_id,
     proposal_id,
     *,
+    revision_id=None,
     suite_name,
     suite_version,
     cases,
@@ -272,6 +278,8 @@ def record_skill_regression_test(
 ):
     request_id = _validate_uuid(request_id, "request_id")
     proposal_id = _validate_uuid(proposal_id, "proposal_id")
+    if revision_id is not None:
+        revision_id = _validate_uuid(revision_id, "revision_id")
     suite_name = _normalize_text(suite_name, "suite_name", 120)
     suite_version = _normalize_text(
         suite_version,
@@ -307,6 +315,40 @@ def record_skill_regression_test(
             skill_name = proposal["skill_name"]
             base_skill_version = proposal["base_skill_version"]
 
+            revision = None
+            if revision_id is not None:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM service_skill_improvement_revisions
+                    WHERE request_id = %s
+                      AND proposal_id = %s
+                      AND id = %s
+                    FOR UPDATE
+                    """,
+                    (request_id, proposal_id, revision_id),
+                )
+                revision = cur.fetchone()
+                if revision is None:
+                    raise SkillRegressionNotFoundError(
+                        "Skill improvement revision not found for proposal"
+                    )
+
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM service_skill_improvement_revisions
+                    WHERE proposal_id = %s
+                      AND revision_number > %s
+                    LIMIT 1
+                    """,
+                    (proposal_id, revision["revision_number"]),
+                )
+                if cur.fetchone() is not None:
+                    raise SkillRegressionStateError(
+                        "Regression testing must target the latest revision"
+                    )
+
             try:
                 current_skill = skill_registry.get(skill_name)
             except KeyError as exc:
@@ -327,19 +369,32 @@ def record_skill_regression_test(
                     "Current registered skill instructions differ from proposal base snapshot"
                 )
 
-            cur.execute(
-                """
-                SELECT *
-                FROM service_skill_regression_tests
-                WHERE proposal_id = %s
-                FOR UPDATE
-                """,
-                (proposal_id,),
-            )
+            if revision_id is None:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM service_skill_regression_tests
+                    WHERE proposal_id = %s
+                      AND revision_id IS NULL
+                    FOR UPDATE
+                    """,
+                    (proposal_id,),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM service_skill_regression_tests
+                    WHERE revision_id = %s
+                    FOR UPDATE
+                    """,
+                    (revision_id,),
+                )
             existing = cur.fetchone()
             if existing is not None:
                 same = (
                     existing["request_id"] == request_id
+                    and existing.get("revision_id") == revision_id
                     and existing["skill_name"] == skill_name
                     and existing["base_skill_version"]
                     == base_skill_version
@@ -378,6 +433,7 @@ def record_skill_regression_test(
                     skill_name,
                     base_skill_version,
                     change_scope,
+                    revision_id,
                     suite_name,
                     suite_version,
                     case_results,
@@ -391,7 +447,7 @@ def record_skill_regression_test(
                 )
                 VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
                 RETURNING *
                 """,
@@ -402,6 +458,7 @@ def record_skill_regression_test(
                     skill_name,
                     base_skill_version,
                     proposal["change_scope"],
+                    revision_id,
                     suite_name,
                     suite_version,
                     Jsonb(normalized_cases),
@@ -424,6 +481,11 @@ def record_skill_regression_test(
                 details={
                     "regression_test_id": str(regression_test_id),
                     "proposal_id": str(proposal_id),
+                    "revision_id": (
+                        str(revision_id)
+                        if revision_id is not None
+                        else None
+                    ),
                     "skill_name": skill_name,
                     "base_skill_version": base_skill_version,
                     "suite_name": suite_name,

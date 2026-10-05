@@ -30,7 +30,13 @@ class TrainingWorkspaceTests(unittest.TestCase):
             "proposal_rationale": None,
             "proposal_status": None,
             "proposal_created_at": None,
+            "revision_id": None,
+            "revision_number": None,
+            "revision_proposed_change": None,
+            "revision_rationale": None,
+            "revision_created_at": None,
             "regression_test_id": None,
+            "regression_revision_id": None,
             "suite_name": None,
             "suite_version": None,
             "total_cases": None,
@@ -79,7 +85,7 @@ class TrainingWorkspaceTests(unittest.TestCase):
         )
         self.assertEqual(
             workspace._supported_actions("regression_failed"),
-            [],
+            ["create_improvement_revision"],
         )
         self.assertEqual(
             workspace._supported_actions("ready_for_promotion_review"),
@@ -87,9 +93,8 @@ class TrainingWorkspaceTests(unittest.TestCase):
         )
 
     def test_blocked_states_are_explicit(self):
-        self.assertEqual(
-            workspace._blocked_reason("regression_failed"),
-            "failed_regression_revision_not_supported",
+        self.assertIsNone(
+            workspace._blocked_reason("regression_failed")
         )
         self.assertEqual(
             workspace._blocked_reason("ready_for_promotion_review"),

@@ -87,6 +87,11 @@ from skill_regression import (
     record_skill_regression_test,
     get_skill_regression_tests,
 )
+from skill_revision import (
+    SkillRevisionConflictError,
+    create_skill_improvement_revision,
+    get_skill_improvement_revisions,
+)
 from training_workspace import (
     get_training_case,
     list_training_cases,
@@ -148,6 +153,7 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             skill_versions={
                 "request_intake": "1.0.0",
                 "request_clarification": "1.0.0",
+                "safety_triage": "1.0.0",
             },
         )
         self.request_ids.append(request_id)
@@ -1097,6 +1103,7 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             {
                 "request_intake": "1.0.0",
                 "request_clarification": "1.0.0",
+                "safety_triage": "1.0.0",
             },
         )
 
@@ -1445,6 +1452,190 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         self.assertEqual(
             promotion_ready_cases[0]["evaluation_id"],
             clarification_evaluation["evaluation_id"],
+        )
+
+
+        safety_evaluation = create_skill_evaluation(
+            request_id,
+            UUID(str(request_created_event["id"])),
+            "safety_triage",
+            verdict="fail",
+            notes="Safety triage wording needs revision after regression review.",
+            actor="operator:ci",
+        )
+        safety_proposal = create_skill_improvement_proposal(
+            request_id,
+            UUID(safety_evaluation["evaluation_id"]),
+            change_scope="instructions",
+            proposed_change=(
+                "Clarify the safety escalation criteria without widening "
+                "ordinary-request escalation."
+            ),
+            rationale="Human evaluation identified an over-escalation risk.",
+            actor="operator:ci",
+        )
+        failed_cases = [
+            {
+                "case_id": "safety-target-over-escalation",
+                "purpose": "target",
+                "baseline_result": "fail",
+                "candidate_result": "pass",
+                "notes": "Target failure was corrected.",
+            },
+            {
+                "case_id": "safety-regression-dangerous-request",
+                "purpose": "regression",
+                "baseline_result": "pass",
+                "candidate_result": "fail",
+                "notes": "Candidate broke a known dangerous-request escalation.",
+            },
+        ]
+        failed_regression = record_skill_regression_test(
+            request_id,
+            UUID(safety_proposal["proposal_id"]),
+            suite_name="safety-triage-core",
+            suite_version="1.0.0",
+            cases=failed_cases,
+            actor="operator:ci",
+        )
+        self.assertEqual(failed_regression["verdict"], "fail")
+
+        failed_training_case = get_training_case(
+            UUID(safety_evaluation["evaluation_id"])
+        )
+        self.assertEqual(
+            failed_training_case["training_stage"],
+            "regression_failed",
+        )
+        self.assertEqual(
+            failed_training_case["supported_actions"],
+            ["create_improvement_revision"],
+        )
+        self.assertIsNone(failed_training_case["blocked_reason"])
+
+        revision = create_skill_improvement_revision(
+            request_id,
+            UUID(safety_proposal["proposal_id"]),
+            proposed_change=(
+                "Escalate urgent or dangerous requests while explicitly "
+                "excluding ordinary requests whose only issue is missing details."
+            ),
+            rationale=(
+                "The first candidate fixed over-escalation but regressed a "
+                "dangerous-request case."
+            ),
+            actor="operator:ci",
+        )
+        revision_retry = create_skill_improvement_revision(
+            request_id,
+            UUID(safety_proposal["proposal_id"]),
+            proposed_change=(
+                "Escalate urgent or dangerous requests while explicitly "
+                "excluding ordinary requests whose only issue is missing details."
+            ),
+            rationale=(
+                "The first candidate fixed over-escalation but regressed a "
+                "dangerous-request case."
+            ),
+            actor="operator:ci",
+        )
+        self.assertEqual(
+            revision_retry["revision_id"],
+            revision["revision_id"],
+        )
+        self.assertEqual(revision["revision_number"], 1)
+        self.assertFalse(revision["applied"])
+        self.assertFalse(revision["promotion_applied"])
+
+        with self.assertRaises(SkillRevisionConflictError):
+            create_skill_improvement_revision(
+                request_id,
+                UUID(safety_proposal["proposal_id"]),
+                proposed_change="Conflicting revision while awaiting regression.",
+                rationale="Different evidence.",
+                actor="operator:ci",
+            )
+
+        revised_pending_case = get_training_case(
+            UUID(safety_evaluation["evaluation_id"])
+        )
+        self.assertEqual(
+            revised_pending_case["training_stage"],
+            "needs_regression_test",
+        )
+        self.assertEqual(
+            revised_pending_case["revision"]["revision_id"],
+            revision["revision_id"],
+        )
+
+        revised_cases = [
+            {
+                "case_id": "safety-target-over-escalation",
+                "purpose": "target",
+                "baseline_result": "fail",
+                "candidate_result": "pass",
+                "notes": "Target remains fixed.",
+            },
+            {
+                "case_id": "safety-regression-dangerous-request",
+                "purpose": "regression",
+                "baseline_result": "pass",
+                "candidate_result": "pass",
+                "notes": "Dangerous-request escalation is preserved.",
+            },
+        ]
+        revised_regression = record_skill_regression_test(
+            request_id,
+            UUID(safety_proposal["proposal_id"]),
+            revision_id=UUID(revision["revision_id"]),
+            suite_name="safety-triage-core",
+            suite_version="1.0.1",
+            cases=revised_cases,
+            actor="operator:ci",
+        )
+        self.assertEqual(revised_regression["verdict"], "pass")
+        self.assertEqual(
+            revised_regression["revision_id"],
+            revision["revision_id"],
+        )
+
+        persisted_revisions = get_skill_improvement_revisions(request_id)
+        self.assertEqual(len(persisted_revisions), 1)
+        self.assertEqual(
+            persisted_revisions[0]["revision_id"],
+            revision["revision_id"],
+        )
+
+        revised_ready_case = get_training_case(
+            UUID(safety_evaluation["evaluation_id"])
+        )
+        self.assertEqual(
+            revised_ready_case["training_stage"],
+            "ready_for_promotion_review",
+        )
+        self.assertEqual(
+            revised_ready_case["regression"]["revision_id"],
+            revision["revision_id"],
+        )
+        self.assertEqual(
+            revised_ready_case["blocked_reason"],
+            "promotion_not_supported",
+        )
+        self.assertFalse(revised_ready_case["promotion_supported"])
+
+        revision_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"] == "skill_improvement_revision_created"
+        ]
+        self.assertEqual(len(revision_events), 1)
+        self.assertFalse(
+            revision_events[0]["details"]["promotion_applied"]
+        )
+        self.assertFalse(
+            revision_events[0]["details"][
+                "production_behaviour_changed"
+            ]
         )
 
 

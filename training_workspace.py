@@ -90,12 +90,12 @@ def _supported_actions(stage):
         return ["create_improvement_proposal"]
     if stage == "needs_regression_test":
         return ["record_regression_test"]
+    if stage == "regression_failed":
+        return ["create_improvement_revision"]
     return []
 
 
 def _blocked_reason(stage):
-    if stage == "regression_failed":
-        return "failed_regression_revision_not_supported"
     if stage == "ready_for_promotion_review":
         return "promotion_not_supported"
     return None
@@ -133,11 +133,27 @@ def _result(row):
                 "created_at": row["proposal_created_at"],
             }
         ),
+        "revision": (
+            None
+            if row["revision_id"] is None
+            else {
+                "revision_id": str(row["revision_id"]),
+                "revision_number": row["revision_number"],
+                "proposed_change": row["revision_proposed_change"],
+                "rationale": row["revision_rationale"],
+                "created_at": row["revision_created_at"],
+            }
+        ),
         "regression": (
             None
             if row["regression_test_id"] is None
             else {
                 "regression_test_id": str(row["regression_test_id"]),
+                "revision_id": (
+                    str(row["regression_revision_id"])
+                    if row["regression_revision_id"] is not None
+                    else None
+                ),
                 "suite_name": row["suite_name"],
                 "suite_version": row["suite_version"],
                 "total_cases": row["total_cases"],
@@ -180,7 +196,13 @@ _PROJECTION_SQL = """
         p.rationale AS proposal_rationale,
         p.status AS proposal_status,
         p.created_at AS proposal_created_at,
+        rev.id AS revision_id,
+        rev.revision_number,
+        rev.proposed_change AS revision_proposed_change,
+        rev.rationale AS revision_rationale,
+        rev.created_at AS revision_created_at,
         t.id AS regression_test_id,
+        t.revision_id AS regression_revision_id,
         t.suite_name,
         t.suite_version,
         t.total_cases,
@@ -207,8 +229,23 @@ _PROJECTION_SQL = """
       ON r.id = e.request_id
     LEFT JOIN service_skill_improvement_proposals p
       ON p.evaluation_id = e.id
+    LEFT JOIN LATERAL (
+        SELECT sr.*
+        FROM service_skill_improvement_revisions sr
+        WHERE sr.proposal_id = p.id
+        ORDER BY sr.revision_number DESC
+        LIMIT 1
+    ) rev ON TRUE
     LEFT JOIN service_skill_regression_tests t
-      ON t.proposal_id = p.id
+      ON (
+          rev.id IS NOT NULL
+          AND t.revision_id = rev.id
+      )
+      OR (
+          rev.id IS NULL
+          AND t.proposal_id = p.id
+          AND t.revision_id IS NULL
+      )
 """
 
 
