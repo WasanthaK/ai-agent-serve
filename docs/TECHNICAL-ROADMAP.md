@@ -530,21 +530,31 @@ Completed real-case skill evaluation:
 - exact retries are idempotent; conflicting evidence fails closed
 - no training signal, version change, policy change, promotion, or production behavior change is applied
 
+Completed controlled skill improvement proposals:
+
+- human-authored instruction/policy improvement proposals implemented and CI-verified in PR #64
+- proposals require `needs_review` or `fail` real-case evaluations
+- current registered skill version must still match the evaluated historical version
+- current instructions are snapshotted before proposal creation
+- scopes are limited to `instructions` and `policy`
+- exact retries are idempotent and conflicting evidence fails closed
+- no apply endpoint, registry/version mutation, policy activation, or production behavior change exists
+
 Current bounded work:
 
-- create human-authored instruction/policy improvement proposals from real-case skill evaluations
-- allow proposals only from `needs_review` or `fail` evaluations
-- require the currently registered skill version to still match the evaluated historical version
-- snapshot the current skill instructions before drafting the proposal
-- support change scope `instructions` or `policy`
-- require explicit proposed change, rationale and operator `decide`
-- permit one immutable proposal per evaluation
-- make exact retries idempotent and conflicting proposal evidence fail closed
-- do not apply the proposal, mutate the registry, change skill versions, change policy, or change production behavior
+- record immutable regression evidence against one skill improvement proposal
+- require at least one known failing target case and one known-good regression case
+- target cases must fail on the baseline and regression cases must pass on the baseline
+- pass the regression gate only when all target cases are fixed and no candidate case fails
+- require the current registered skill version and instructions to still match the proposal base snapshot
+- require operator `decide` to record regression evidence and `read` to retrieve it
+- make exact retries idempotent and conflicting regression evidence fail closed
+- do not apply the proposal, mutate the registry, change skill versions, promote skills, or change production behavior
 
 Planned next:
 
-- Regression tests before skill promotion
+- Training/evaluation API and end-user Training / Skill Improvement UI
+- Controlled skill promotion after regression evidence
 
 Production behaviour must never change solely because of unreviewed model output.
 

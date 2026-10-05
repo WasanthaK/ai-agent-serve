@@ -82,6 +82,11 @@ from skill_improvement import (
     create_skill_improvement_proposal,
     get_skill_improvement_proposals,
 )
+from skill_regression import (
+    SkillRegressionConflictError,
+    record_skill_regression_test,
+    get_skill_regression_tests,
+)
 
 
 def ready_analysis():
@@ -1301,6 +1306,103 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         )
         self.assertFalse(
             proposal_events[0]["details"][
+                "production_behaviour_changed"
+            ]
+        )
+
+
+        passing_cases = [
+            {
+                "case_id": "clarification-target-existing-info",
+                "purpose": "target",
+                "baseline_result": "fail",
+                "candidate_result": "pass",
+                "notes": "Candidate stops asking for information already supplied.",
+            },
+            {
+                "case_id": "clarification-regression-missing-location",
+                "purpose": "regression",
+                "baseline_result": "pass",
+                "candidate_result": "pass",
+                "notes": "Candidate still asks for genuinely required location.",
+            },
+        ]
+        regression_test = record_skill_regression_test(
+            request_id,
+            UUID(proposal["proposal_id"]),
+            suite_name="request-clarification-core",
+            suite_version="1.0.0",
+            cases=passing_cases,
+            actor="operator:ci",
+        )
+        regression_retry = record_skill_regression_test(
+            request_id,
+            UUID(proposal["proposal_id"]),
+            suite_name="request-clarification-core",
+            suite_version="1.0.0",
+            cases=passing_cases,
+            actor="operator:ci",
+        )
+
+        self.assertEqual(
+            regression_retry["regression_test_id"],
+            regression_test["regression_test_id"],
+        )
+        self.assertEqual(regression_test["verdict"], "pass")
+        self.assertTrue(regression_test["regression_gate_passed"])
+        self.assertEqual(regression_test["target_cases"], 1)
+        self.assertEqual(regression_test["fixed_target_cases"], 1)
+        self.assertEqual(regression_test["regression_failures"], 0)
+        self.assertFalse(regression_test["proposal_applied"])
+        self.assertFalse(regression_test["skill_version_changed"])
+        self.assertFalse(regression_test["registry_changed"])
+        self.assertFalse(regression_test["promotion_applied"])
+        self.assertFalse(
+            regression_test["production_behaviour_changed"]
+        )
+
+        with self.assertRaises(SkillRegressionConflictError):
+            record_skill_regression_test(
+                request_id,
+                UUID(proposal["proposal_id"]),
+                suite_name="request-clarification-core",
+                suite_version="1.0.0",
+                cases=[
+                    passing_cases[0],
+                    {
+                        **passing_cases[1],
+                        "candidate_result": "fail",
+                        "notes": "Conflicting regression evidence.",
+                    },
+                ],
+                actor="operator:ci",
+            )
+
+        persisted_regression_tests = get_skill_regression_tests(request_id)
+        self.assertEqual(len(persisted_regression_tests), 1)
+        self.assertEqual(
+            persisted_regression_tests[0]["regression_test_id"],
+            regression_test["regression_test_id"],
+        )
+
+        regression_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"] == "skill_regression_test_recorded"
+        ]
+        self.assertEqual(len(regression_events), 1)
+        self.assertEqual(
+            regression_events[0]["details"]["verdict"],
+            "pass",
+        )
+        self.assertTrue(
+            regression_events[0]["details"]["regression_gate_passed"]
+        )
+        self.assertFalse(
+            regression_events[0]["details"]["promotion_applied"]
+        )
+        self.assertFalse(
+            regression_events[0]["details"][
                 "production_behaviour_changed"
             ]
         )

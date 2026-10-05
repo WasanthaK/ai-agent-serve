@@ -255,3 +255,34 @@ A proposal remains in `proposed` state only. This slice intentionally provides *
 - perform an external action.
 
 The PostgreSQL lifecycle proof verifies that a passing evaluation cannot create a proposal, a `needs_review` evaluation can create exactly one proposal for the matching current skill version, conflicting proposal evidence fails closed, and the proposal remains unapplied.
+
+
+## Regression tests before skill promotion
+
+A proposed instruction or policy change may receive one immutable regression-evidence record before any future promotion step exists.
+
+Regression evidence is deliberately human-reviewed and records a bounded suite of cases. Every suite must include:
+
+- at least one `target` case representing a known baseline failure; and
+- at least one `regression` case representing known-good baseline behaviour.
+
+For each case, the operator records the baseline result and candidate result as `pass` or `fail`, plus review notes. Target cases must have a baseline `fail`; regression cases must have a baseline `pass`.
+
+The regression gate passes only when:
+
+- every target case changes to candidate `pass`;
+- no known-good regression case changes to candidate `fail`; and
+- no candidate case remains failed.
+
+Recording evidence requires:
+
+- the exact immutable improvement-proposal ID;
+- the proposal to remain in `proposed` state;
+- the currently registered skill version to still equal the proposal base version;
+- the currently registered skill instructions to still exactly equal the proposal base snapshot;
+- explicit suite name/version and case evidence; and
+- operator `decide`.
+
+One immutable regression record is allowed per proposal. Exact retries return the same record; conflicting evidence fails closed.
+
+This slice intentionally provides no automatic test generation, no model judge authority, no apply endpoint, and no promotion endpoint. A passing regression gate is evidence only. It does not mutate the live registry, increment a version, change prompts or policies, or change production behaviour.

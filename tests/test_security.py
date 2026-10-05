@@ -1207,6 +1207,75 @@ class RouteAuthorizationTests(unittest.TestCase):
             self.assertEqual(allowed.status_code, 200)
             retrieve.assert_called_once_with(self.request_id)
 
+    def test_skill_regression_test_permissions(self):
+        proposal_id = uuid4()
+        regression_test_id = uuid4()
+        payload = {
+            "proposal_id": str(proposal_id),
+            "suite_name": "request-clarification-core",
+            "suite_version": "1.0.0",
+            "cases": [
+                {
+                    "case_id": "target-1",
+                    "purpose": "target",
+                    "baseline_result": "fail",
+                    "candidate_result": "pass",
+                    "notes": "Known failing case is fixed.",
+                },
+                {
+                    "case_id": "regression-1",
+                    "purpose": "regression",
+                    "baseline_result": "pass",
+                    "candidate_result": "pass",
+                    "notes": "Known-good behavior remains correct.",
+                },
+            ],
+        }
+        result = {
+            "regression_test_id": str(regression_test_id),
+            "request_id": str(self.request_id),
+            "proposal_id": str(proposal_id),
+            "verdict": "pass",
+            "regression_gate_passed": True,
+            "promotion_applied": False,
+        }
+
+        with patch.object(
+            api,
+            "record_skill_regression_test",
+            return_value=result,
+        ) as record:
+            denied = self.client.post(
+                f"/requests/{self.request_id}/skill-regression-tests",
+                json=payload,
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(denied.status_code, 403)
+            record.assert_not_called()
+
+            allowed = self.client.post(
+                f"/requests/{self.request_id}/skill-regression-tests",
+                json=payload,
+                headers={"X-API-Key": OPERATOR_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            self.assertEqual(
+                record.call_args.kwargs["actor"],
+                "operator:wasantha",
+            )
+
+        with patch.object(
+            api,
+            "get_skill_regression_tests",
+            return_value=[result],
+        ) as retrieve:
+            allowed = self.client.get(
+                f"/requests/{self.request_id}/skill-regression-tests",
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            retrieve.assert_called_once_with(self.request_id)
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)
