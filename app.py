@@ -839,21 +839,21 @@ def training_console():
     return training_ui_response()
 
 
-@app.get(
-    "/training/cases",
-    dependencies=[Depends(require_operator_permission("read"))],
-)
+@app.get("/training/cases")
 def retrieve_training_cases(
     stage: Optional[str] = None,
     skill_name: Optional[str] = None,
     limit: int = 50,
+    operator: OperatorPrincipal = Depends(require_operator_permission("read")),
 ):
     try:
+        tenant_id = resolve_active_tenant_id(operator.tenant_key)
         return {
             "cases": list_training_cases(
                 stage=stage,
                 skill_name=skill_name,
                 limit=limit,
+                tenant_id=tenant_id,
             ),
             "promotion_supported": True,
         }
@@ -861,13 +861,17 @@ def retrieve_training_cases(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@app.get(
-    "/training/cases/{evaluation_id}",
-    dependencies=[Depends(require_operator_permission("read"))],
-)
-def retrieve_training_case(evaluation_id: UUID):
+@app.get("/training/cases/{evaluation_id}")
+def retrieve_training_case(
+    evaluation_id: UUID,
+    operator: OperatorPrincipal = Depends(require_operator_permission("read")),
+):
     try:
-        return get_training_case(evaluation_id)
+        tenant_id = resolve_active_tenant_id(operator.tenant_key)
+        return get_training_case(
+            evaluation_id,
+            tenant_id=tenant_id,
+        )
     except TrainingWorkspaceNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except TrainingWorkspaceValidationError as exc:
