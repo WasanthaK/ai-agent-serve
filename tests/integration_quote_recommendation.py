@@ -70,6 +70,7 @@ from closure_escalation import (
     create_closure_escalation,
     get_closure_escalations,
 )
+from outcome_measurement import get_outcome_measurement
 
 
 def ready_analysis():
@@ -1042,6 +1043,25 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             self.assertFalse(
                 event["details"]["external_action_performed"]
             )
+
+        outcome = get_outcome_measurement(request_id)
+        self.assertEqual(outcome["request_status"], "actioned")
+        self.assertEqual(outcome["delivery_status"], "completed")
+        self.assertTrue(outcome["delivery_completed"])
+        self.assertEqual(outcome["satisfaction_status"], "responded")
+        self.assertTrue(outcome["satisfaction_response_recorded"])
+        self.assertEqual(outcome["satisfaction_rating"], 1)
+        self.assertTrue(outcome["review_request_prepared"])
+        self.assertEqual(outcome["delivery_exception_count"], 2)
+        self.assertEqual(outcome["intervention_count"], 1)
+        self.assertEqual(outcome["open_intervention_count"], 0)
+        self.assertTrue(outcome["complaint_present"])
+        self.assertTrue(outcome["rework_present"])
+        self.assertIsNone(outcome["score"])
+        self.assertIsNone(outcome["provider_rank"])
+        self.assertFalse(outcome["policy_change_applied"])
+        self.assertFalse(outcome["training_signal_applied"])
+        self.assertFalse(outcome["external_action_performed"])
 
 
 if __name__ == "__main__":

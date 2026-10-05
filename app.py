@@ -187,6 +187,11 @@ from closure_escalation import (
     create_closure_escalation,
     get_closure_escalations,
 )
+from outcome_measurement import (
+    OutcomeMeasurementNotFoundError,
+    OutcomeMeasurementValidationError,
+    get_outcome_measurement,
+)
 from tools import ToolExecutionError, execute_tool, get_tool_version
 from security import (
     OperatorPrincipal,
@@ -658,6 +663,19 @@ def record_request_satisfaction_response(
         SatisfactionFollowUpConflictError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/requests/{request_id}/outcome-measurement",
+    dependencies=[Depends(require_operator_permission("read"))],
+)
+def retrieve_outcome_measurement(request_id: UUID):
+    try:
+        return get_outcome_measurement(request_id)
+    except OutcomeMeasurementNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except OutcomeMeasurementValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get(

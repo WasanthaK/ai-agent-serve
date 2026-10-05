@@ -145,3 +145,43 @@ The audit event explicitly records:
 - `external_action_performed = false`.
 
 The PostgreSQL lifecycle proof creates both complaint and rework escalations from the same 1/5 satisfaction evidence, preserves completed delivery and actioned request state, and proves that neither escalation dispatches or reopens work.
+
+
+## Outcome measurement
+
+Outcome measurement is a read-only factual projection over persisted service-delivery and closure evidence.
+
+`GET /requests/{request_id}/outcome-measurement` requires operator `read`.
+
+The projection reports:
+
+- request and provider identity;
+- delivery status and completion timestamp;
+- whether satisfaction evidence exists;
+- recorded satisfaction rating and response timestamp;
+- whether a public-review request has been prepared;
+- delivery exception count;
+- total and open intervention counts;
+- complaint presence; and
+- rework presence.
+
+The projection deliberately does **not** compute:
+
+- provider score;
+- provider rank;
+- success/failure label;
+- training signal;
+- automated policy change; or
+- any production action.
+
+Returned control fields make that boundary explicit:
+
+- `score = null`;
+- `provider_rank = null`;
+- `policy_change_applied = false`;
+- `training_signal_applied = false`; and
+- `external_action_performed = false`.
+
+This slice creates no database mutation and emits no operational action. It is evidence for later human-reviewed skill evaluation and policy work, not authority to change production behavior.
+
+The PostgreSQL lifecycle proof reconstructs the current full closure facts—including completed delivery, 1/5 satisfaction evidence, two delivery exceptions, intervention history, prepared review request, complaint and rework—without scoring or ranking the provider.

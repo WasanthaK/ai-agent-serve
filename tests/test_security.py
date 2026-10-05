@@ -1072,6 +1072,36 @@ class RouteAuthorizationTests(unittest.TestCase):
             self.assertEqual(allowed.status_code, 200)
             retrieve.assert_called_once_with(self.request_id)
 
+    def test_outcome_measurement_requires_read_permission(self):
+        result = {
+            "request_id": str(self.request_id),
+            "request_status": "actioned",
+            "delivery_completed": True,
+            "score": None,
+            "provider_rank": None,
+            "policy_change_applied": False,
+            "training_signal_applied": False,
+            "external_action_performed": False,
+        }
+
+        with patch.object(
+            api,
+            "get_outcome_measurement",
+            return_value=result,
+        ) as measure:
+            denied = self.client.get(
+                f"/requests/{self.request_id}/outcome-measurement",
+            )
+            self.assertEqual(denied.status_code, 401)
+            measure.assert_not_called()
+
+            allowed = self.client.get(
+                f"/requests/{self.request_id}/outcome-measurement",
+                headers={"X-API-Key": VIEWER_KEY},
+            )
+            self.assertEqual(allowed.status_code, 200)
+            measure.assert_called_once_with(self.request_id)
+
     def test_public_routes_remain_public(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/service-catalog").status_code, 200)
