@@ -501,22 +501,31 @@ Completed public review-request preparation:
 - exact retries are idempotent; conflicting evidence fails closed
 - no review request is sent and no external action is performed
 
+Completed complaint and rework escalation foundation:
+
+- human-owned closure escalation records implemented and CI-verified in PR #61
+- supported kinds are limited to `complaint` and `rework`
+- at most one escalation of each kind is allowed per request
+- explicit priority, operator reason and operator `decide` are required
+- escalation is not inferred automatically from satisfaction rating
+- rework escalation does not reopen completed delivery or dispatch work
+- exact retries are idempotent; conflicting same-kind evidence fails closed
+- no notification or external action is performed
+
 Current bounded work:
 
-- create human-owned closure escalation records from recorded satisfaction evidence
-- support only `complaint` and `rework` kinds
-- permit at most one escalation of each kind per request
-- require explicit priority: `normal`, `high`, or `urgent`
-- require explicit operator reason and operator `decide`
-- do not infer escalation automatically from satisfaction rating
-- do not reopen completed delivery or dispatch rework
-- make exact retries idempotent and conflicting same-kind evidence fail closed
-- record `closure_escalation_created` transactionally
-- do not notify anyone or perform external actions in this slice
+- expose read-only factual outcome measurement for a request
+- report persisted delivery completion and completion timestamp
+- report satisfaction response state, rating and response timestamp
+- report review-request preparation
+- report delivery exception, intervention and open-intervention counts
+- report complaint and rework presence
+- require operator `read`
+- do not compute provider score/rank
+- do not apply training signals, policy changes, or external actions
 
 Planned next:
 
-- Outcome measurement
 - Skill evaluation against real cases
 - Controlled improvement of instructions and policies
 - Regression tests before skill promotion
