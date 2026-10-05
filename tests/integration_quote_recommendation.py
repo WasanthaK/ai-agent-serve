@@ -34,6 +34,11 @@ from delivery_notification import (
     get_prepared_delivery_notifications,
     prepare_delivery_notifications,
 )
+from delivery_appointment import (
+    confirm_delivery_appointment,
+    get_delivery_appointment,
+    propose_delivery_appointment,
+)
 
 
 def ready_analysis():
@@ -361,6 +366,93 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
         self.assertFalse(
             notification_events[0]["details"]["external_action_performed"]
         )
+
+        proposed_start = datetime.now(timezone.utc) + timedelta(days=2)
+        proposed_end = proposed_start + timedelta(hours=2)
+        appointment = propose_delivery_appointment(
+            request_id,
+            proposed_start,
+            proposed_end,
+            reason="Human coordinated a proposed service window.",
+            actor="operator:ci",
+        )
+        appointment_retry = propose_delivery_appointment(
+            request_id,
+            proposed_start,
+            proposed_end,
+            reason="Human coordinated a proposed service window.",
+            actor="operator:ci",
+        )
+
+        self.assertEqual(
+            appointment_retry["appointment_id"],
+            appointment["appointment_id"],
+        )
+        self.assertEqual(appointment["status"], "proposed")
+        self.assertEqual(
+            appointment["proposed_start_at"],
+            proposed_start,
+        )
+        self.assertEqual(
+            appointment["proposed_end_at"],
+            proposed_end,
+        )
+        self.assertFalse(
+            appointment["external_calendar_booking_created"]
+        )
+        self.assertFalse(appointment["notification_sent"])
+
+        confirmed = confirm_delivery_appointment(
+            request_id,
+            UUID(appointment["appointment_id"]),
+            reason="Human confirmed both parties agreed to the window.",
+            actor="operator:ci",
+        )
+        confirmed_retry = confirm_delivery_appointment(
+            request_id,
+            UUID(appointment["appointment_id"]),
+            reason="Human confirmed both parties agreed to the window.",
+            actor="operator:ci",
+        )
+
+        self.assertEqual(
+            confirmed_retry["appointment_id"],
+            confirmed["appointment_id"],
+        )
+        self.assertEqual(confirmed["status"], "confirmed")
+        self.assertIsNotNone(confirmed["confirmed_at"])
+        self.assertFalse(
+            confirmed["external_calendar_booking_created"]
+        )
+        self.assertFalse(confirmed["notification_sent"])
+
+        persisted_appointment = get_delivery_appointment(request_id)
+        self.assertEqual(
+            persisted_appointment["appointment_id"],
+            appointment["appointment_id"],
+        )
+        self.assertEqual(
+            persisted_appointment["status"],
+            "confirmed",
+        )
+
+        appointment_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"].startswith("delivery_appointment_")
+        ]
+        self.assertEqual(
+            [event["event_type"] for event in appointment_events],
+            [
+                "delivery_appointment_proposed",
+                "delivery_appointment_confirmed",
+            ],
+        )
+        for event in appointment_events:
+            self.assertFalse(
+                event["details"]["external_calendar_booking_created"]
+            )
+            self.assertFalse(event["details"]["notification_sent"])
 
 
 if __name__ == "__main__":

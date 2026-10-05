@@ -355,15 +355,24 @@ Completed post-award delivery handoff:
 - exact retries are idempotent and conflicting handoffs fail closed
 - handoff creates no provider contact, dispatch, appointment or notification send
 
+Completed delivery notification preparation:
+
+- exactly one customer and one provider notification implemented and CI-verified in PR #51
+- message purpose and content are derived deterministically from persisted delivery facts
+- destination channel/address remain unresolved rather than inventing outbound authority
+- preparation requires operator `decide`; retrieval requires `read`
+- repeated preparation is idempotent
+- no email, WhatsApp, SMS or other external message is sent
+
 Current bounded work:
 
-- prepare one durable customer notification and one durable provider notification from the delivery handoff
-- derive message purpose and content deterministically from persisted delivery facts
-- keep delivery destination/channel unresolved because provider contact destinations are not yet modeled
-- require operator `decide` to prepare and `read` to retrieve
-- make repeated preparation idempotent
-- write `delivery_notifications_prepared` transactionally
-- do not send email, WhatsApp, SMS or any other external message in this slice
+- add one human-controlled delivery appointment proposal per actioned request
+- require a timezone-aware future start/end window and explicit proposal reason
+- allow explicit human confirmation of the existing proposal
+- make exact proposal and confirmation retries idempotent; conflicting evidence fails closed
+- require operator `decide` for proposal/confirmation and `read` for retrieval
+- write proposal and confirmation audit events transactionally
+- do not create external calendar bookings or send notifications in this slice
 
 Routing roadmap:
 
@@ -401,15 +410,16 @@ Purchase-order creation remains outside the initial scope.
 Completed:
 
 - Post-award internal delivery handoff and request transition to `actioned` — PR #50
+- Durable customer/provider notification preparation with unresolved destinations — PR #51
 
 Current bounded work:
 
-- Durable customer/provider notification preparation with unresolved destinations
+- Human-controlled appointment proposal and confirmation state management
 
 Planned next:
 
 - Notification destination resolution and delivery authorization
-- Appointment proposals and confirmation
+- Status tracking
 - Status tracking
 - Delay and exception handling
 - Human intervention queues

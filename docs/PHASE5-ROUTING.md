@@ -456,6 +456,32 @@ Every prepared notification explicitly reports:
 
 No email, WhatsApp, SMS or other outbound transport is invoked in this slice.
 
+## Delivery appointment state
+
+Appointment coordination is modeled independently from messaging transport.
+
+An actioned request may have one durable appointment proposal with:
+
+- a timezone-aware future start time;
+- a timezone-aware end time after the start;
+- the delivery handoff/provider identity;
+- the proposing operator; and
+- an explicit proposal reason.
+
+The proposal is immutable. An exact retry returns the same proposal, while a different window or proposal evidence fails closed.
+
+A separate confirmation transition records:
+
+- the confirming operator;
+- explicit confirmation reason; and
+- confirmation timestamp.
+
+Confirmation is also exact-retry idempotent and conflicting confirmation evidence fails closed.
+
+Both proposal and confirmation require operator `decide`; retrieval requires `read`.
+
+This state machine performs no external calendar booking and sends no notification. Those transports remain separate dependencies.
+
 ## Current exclusions
 
 This routing stage does not yet include:
@@ -516,3 +542,6 @@ The post-award PostgreSQL proof extends the governed recommendation/award flow t
 
 
 The Phase 6 notification-preparation PostgreSQL proof extends the governed quote recommendation -> human award -> delivery handoff flow and verifies exactly one customer plus one provider notification, stable retry identities, unresolved destinations, one preparation audit event, and zero external sends.
+
+
+The Phase 6 appointment PostgreSQL proof extends the governed flow through proposal and confirmation, verifies stable retry identity, persisted timestamps, exactly one proposal plus one confirmation audit event, and zero external calendar or messaging side effects.
