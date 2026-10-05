@@ -56,6 +56,10 @@ from human_intervention import (
     get_human_interventions,
 )
 from delivery_timeline import get_delivery_timeline
+from satisfaction_follow_up import (
+    get_satisfaction_follow_up,
+    prepare_satisfaction_follow_up,
+)
 
 
 def ready_analysis():
@@ -781,6 +785,53 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(item["actor"])
             self.assertIsNotNone(item["created_at"])
             self.assertIn("details", item)
+
+        follow_up = prepare_satisfaction_follow_up(
+            request_id,
+            actor="operator:ci",
+        )
+        follow_up_retry = prepare_satisfaction_follow_up(
+            request_id,
+            actor="operator:ci",
+        )
+
+        self.assertEqual(
+            follow_up_retry["follow_up_id"],
+            follow_up["follow_up_id"],
+        )
+        self.assertEqual(follow_up["status"], "prepared")
+        self.assertEqual(follow_up["purpose"], "customer_satisfaction")
+        self.assertEqual(follow_up["rating_min"], 1)
+        self.assertEqual(follow_up["rating_max"], 5)
+        self.assertIsNone(follow_up["destination_channel"])
+        self.assertIsNone(follow_up["destination_address"])
+        self.assertFalse(follow_up["response_recorded"])
+        self.assertFalse(follow_up["sent"])
+        self.assertFalse(follow_up["external_action_performed"])
+
+        persisted_follow_up = get_satisfaction_follow_up(request_id)
+        self.assertEqual(
+            persisted_follow_up["follow_up_id"],
+            follow_up["follow_up_id"],
+        )
+
+        satisfaction_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"]
+            == "customer_satisfaction_follow_up_prepared"
+        ]
+        self.assertEqual(len(satisfaction_events), 1)
+        self.assertFalse(
+            satisfaction_events[0]["details"]["destination_resolved"]
+        )
+        self.assertFalse(
+            satisfaction_events[0]["details"]["response_recorded"]
+        )
+        self.assertFalse(satisfaction_events[0]["details"]["sent"])
+        self.assertFalse(
+            satisfaction_events[0]["details"]["external_action_performed"]
+        )
 
 
 if __name__ == "__main__":
