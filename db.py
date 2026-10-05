@@ -195,7 +195,7 @@ def get_request_events(request_id):
                     created_at
                 FROM agent_events
                 WHERE request_id = %s
-                ORDER BY created_at ASC
+                ORDER BY created_at ASC, id ASC
                 """,
                 (request_id,),
             )
