@@ -305,6 +305,11 @@ def record_satisfaction_response(
                     "Satisfaction follow-up not found for request"
                 )
 
+            if responded_at < follow_up["created_at"]:
+                raise SatisfactionFollowUpValidationError(
+                    "responded_at cannot predate follow-up creation"
+                )
+
             if follow_up["status"] == "responded":
                 same = (
                     follow_up["rating"] == rating
