@@ -549,6 +549,29 @@ def _tenant_scoped_save_request(*args, tenant_id, **kwargs):
     return save_request(*args, tenant_id=tenant_id, **kwargs)
 
 
+def _require_operator_request_scope(request_id, operator):
+    try:
+        tenant_id = resolve_active_tenant_id(operator.tenant_key)
+    except TenantScopeError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    if _tenant_scoped_get_request(request_id, tenant_id) is None:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return operator
+
+
+def require_request_permission(permission):
+    authenticate_operator = require_operator_permission(permission)
+
+    def authorize_request(
+        request_id: UUID,
+        operator: OperatorPrincipal = Depends(authenticate_operator),
+    ):
+        return _require_operator_request_scope(request_id, operator)
+
+    return authorize_request
+
+
 def _quote_webhook_response(saved_request):
     return {
         "request_id": saved_request["id"],
@@ -779,28 +802,16 @@ def quote_webhook(
     }
 
 
-@app.get("/requests/{request_id}", dependencies=[Depends(require_operator_permission("read"))])
-def retrieve_request(request_id: UUID, http_request: Request):
-    try:
-        tenant_id = tenant_id_from_request(http_request)
-    except TenantScopeError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    request = _tenant_scoped_get_request(request_id, tenant_id)
-
-    if request is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Request not found",
-        )
-
-    return request
+@app.get("/requests/{request_id}", dependencies=[Depends(require_request_permission("read"))])
+def retrieve_request(request_id: UUID):
+    return get_request(request_id)
 
 
 @app.post("/requests/{request_id}/satisfaction-follow-up/response")
 def record_request_satisfaction_response(
     request_id: UUID,
     payload: SatisfactionResponseInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return record_satisfaction_response(
@@ -865,7 +876,7 @@ def retrieve_training_case(evaluation_id: UUID):
 
 @app.get(
     "/requests/{request_id}/skill-promotions",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_skill_promotions(request_id: UUID):
     try:
@@ -881,7 +892,7 @@ def retrieve_skill_promotions(request_id: UUID):
 def create_request_skill_promotion(
     request_id: UUID,
     payload: SkillPromotionInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return promote_skill(
@@ -903,7 +914,7 @@ def create_request_skill_promotion(
 
 @app.get(
     "/requests/{request_id}/skill-improvement-revisions",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_skill_improvement_revisions(request_id: UUID):
     try:
@@ -919,7 +930,7 @@ def retrieve_skill_improvement_revisions(request_id: UUID):
 def create_request_skill_improvement_revision(
     request_id: UUID,
     payload: SkillImprovementRevisionInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return create_skill_improvement_revision(
@@ -942,7 +953,7 @@ def create_request_skill_improvement_revision(
 
 @app.get(
     "/requests/{request_id}/skill-regression-tests",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_skill_regression_tests(request_id: UUID):
     try:
@@ -958,7 +969,7 @@ def retrieve_skill_regression_tests(request_id: UUID):
 def create_request_skill_regression_test(
     request_id: UUID,
     payload: SkillRegressionTestInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return record_skill_regression_test(
@@ -983,7 +994,7 @@ def create_request_skill_regression_test(
 
 @app.get(
     "/requests/{request_id}/skill-improvement-proposals",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_skill_improvement_proposals(request_id: UUID):
     try:
@@ -999,7 +1010,7 @@ def retrieve_skill_improvement_proposals(request_id: UUID):
 def create_request_skill_improvement_proposal(
     request_id: UUID,
     payload: SkillImprovementProposalInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return create_skill_improvement_proposal(
@@ -1023,7 +1034,7 @@ def create_request_skill_improvement_proposal(
 
 @app.get(
     "/requests/{request_id}/skill-evaluations",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_skill_evaluations(request_id: UUID):
     try:
@@ -1039,7 +1050,7 @@ def retrieve_skill_evaluations(request_id: UUID):
 def create_request_skill_evaluation(
     request_id: UUID,
     payload: SkillEvaluationInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return create_skill_evaluation(
@@ -1063,7 +1074,7 @@ def create_request_skill_evaluation(
 
 @app.get(
     "/requests/{request_id}/outcome-measurement",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_outcome_measurement(request_id: UUID):
     try:
@@ -1076,7 +1087,7 @@ def retrieve_outcome_measurement(request_id: UUID):
 
 @app.get(
     "/requests/{request_id}/closure-escalations",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_closure_escalations(request_id: UUID):
     try:
@@ -1092,7 +1103,7 @@ def retrieve_closure_escalations(request_id: UUID):
 def create_request_closure_escalation(
     request_id: UUID,
     payload: ClosureEscalationInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return create_closure_escalation(
@@ -1116,7 +1127,7 @@ def create_request_closure_escalation(
 
 @app.get(
     "/requests/{request_id}/review-request",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_review_request(request_id: UUID):
     try:
@@ -1136,7 +1147,7 @@ def retrieve_review_request(request_id: UUID):
 def prepare_request_review_request(
     request_id: UUID,
     payload: ReviewRequestInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return prepare_review_request(
@@ -1158,7 +1169,7 @@ def prepare_request_review_request(
 
 @app.get(
     "/requests/{request_id}/satisfaction-follow-up",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_satisfaction_follow_up(request_id: UUID):
     try:
@@ -1177,7 +1188,7 @@ def retrieve_satisfaction_follow_up(request_id: UUID):
 @app.post("/requests/{request_id}/satisfaction-follow-up")
 def prepare_request_satisfaction_follow_up(
     request_id: UUID,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return prepare_satisfaction_follow_up(
@@ -1194,7 +1205,7 @@ def prepare_request_satisfaction_follow_up(
 
 @app.get(
     "/requests/{request_id}/delivery-timeline",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_delivery_timeline(request_id: UUID):
     request = get_request(request_id)
@@ -1210,7 +1221,7 @@ def retrieve_delivery_timeline(request_id: UUID):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@app.get("/requests/{request_id}/events", dependencies=[Depends(require_operator_permission("read"))])
+@app.get("/requests/{request_id}/events", dependencies=[Depends(require_request_permission("read"))])
 def retrieve_request_events(request_id: UUID):
     request = get_request(request_id)
 
@@ -1226,7 +1237,7 @@ def retrieve_request_events(request_id: UUID):
     }
 
 
-@app.get("/requests/{request_id}/messages", dependencies=[Depends(require_operator_permission("read"))])
+@app.get("/requests/{request_id}/messages", dependencies=[Depends(require_request_permission("read"))])
 def retrieve_request_messages(request_id: UUID):
     request = get_request(request_id)
 
@@ -1247,15 +1258,9 @@ def retrieve_request_messages(request_id: UUID):
 def receive_customer_reply(
     request_id: UUID,
     reply: CustomerReply,
-    operator: OperatorPrincipal = Depends(require_operator_permission("reply")),
+    operator: OperatorPrincipal = Depends(require_request_permission("reply")),
 ):
-    try:
-        tenant_id = resolve_active_tenant_id(operator.tenant_key)
-    except TenantScopeError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    request = _tenant_scoped_get_request(request_id, tenant_id)
-    if request is None:
-        raise HTTPException(status_code=404, detail="Request not found")
+    request = get_request(request_id)
 
     return _process_customer_reply(
         request_id, reply, request,
@@ -1361,7 +1366,7 @@ def _process_customer_reply(request_id, reply, request, channel, actor):
 
 @app.get(
     "/requests/{request_id}/provider-selection",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_provider_selection(request_id: UUID):
     try:
@@ -1382,7 +1387,7 @@ def retrieve_provider_selection(request_id: UUID):
 def select_request_providers(
     request_id: UUID,
     decision: ProviderSelectionDecision,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return select_providers_for_request(
@@ -1407,7 +1412,7 @@ def select_request_providers(
 
 @app.get(
     "/requests/{request_id}/rfq-handoff",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_rfq_handoff(request_id: UUID):
     try:
@@ -1424,7 +1429,7 @@ def retrieve_rfq_handoff(request_id: UUID):
 @app.post("/requests/{request_id}/rfq-handoff")
 def prepare_request_rfq_handoff(
     request_id: UUID,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return prepare_rfq_handoff(
@@ -1448,7 +1453,7 @@ def prepare_request_rfq_handoff(
 def authorize_request_rfq_delivery(
     request_id: UUID,
     handoff_id: UUID,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return authorize_rfq_delivery(
@@ -1475,7 +1480,7 @@ def confirm_request_rfq_delivery(
     request_id: UUID,
     handoff_id: UUID,
     confirmation: RFQDeliveryConfirmation,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return confirm_rfq_delivery(
@@ -1503,7 +1508,7 @@ def record_request_rfq_provider_response(
     request_id: UUID,
     handoff_id: UUID,
     response: RFQProviderResponse,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return ingest_rfq_response(
@@ -1526,7 +1531,7 @@ def record_request_rfq_provider_response(
 
 @app.get(
     "/requests/{request_id}/rfq-handoffs/{handoff_id}/normalized-quote",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_normalized_quote(
     request_id: UUID,
@@ -1550,7 +1555,7 @@ def record_normalized_quote(
     request_id: UUID,
     handoff_id: UUID,
     quote: NormalizedQuoteInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return normalize_structured_quote(
@@ -1579,7 +1584,7 @@ def record_normalized_quote(
 
 @app.get(
     "/requests/{request_id}/rfq-handoffs/{handoff_id}/quote-completeness",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_quote_completeness(
     request_id: UUID,
@@ -1595,7 +1600,7 @@ def retrieve_quote_completeness(
 
 @app.get(
     "/requests/{request_id}/quote-comparison",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_quote_comparison(request_id: UUID):
     try:
@@ -1608,7 +1613,7 @@ def retrieve_quote_comparison(request_id: UUID):
 
 @app.get(
     "/requests/{request_id}/quote-recommendation",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_quote_recommendation(request_id: UUID):
     try:
@@ -1628,7 +1633,7 @@ def retrieve_quote_recommendation(request_id: UUID):
 def record_quote_recommendation(
     request_id: UUID,
     recommendation: QuoteRecommendationInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return recommend_quote_for_request(
@@ -1651,7 +1656,7 @@ def record_quote_recommendation(
 
 @app.get(
     "/requests/{request_id}/quote-award",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_quote_award(request_id: UUID):
     try:
@@ -1668,7 +1673,7 @@ def retrieve_quote_award(request_id: UUID):
 def record_quote_award(
     request_id: UUID,
     award: QuoteAwardInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return award_recommended_quote(
@@ -1690,7 +1695,7 @@ def record_quote_award(
 
 @app.get(
     "/requests/{request_id}/delivery-handoff",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_delivery_handoff(request_id: UUID):
     try:
@@ -1710,7 +1715,7 @@ def retrieve_delivery_handoff(request_id: UUID):
 def activate_request_delivery_handoff(
     request_id: UUID,
     payload: DeliveryHandoffInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return activate_delivery_handoff(
@@ -1731,7 +1736,7 @@ def activate_request_delivery_handoff(
 
 @app.get(
     "/requests/{request_id}/delivery-notifications",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_delivery_notifications(request_id: UUID):
     try:
@@ -1756,7 +1761,7 @@ def retrieve_delivery_notifications(request_id: UUID):
 @app.post("/requests/{request_id}/delivery-notifications")
 def prepare_request_delivery_notifications(
     request_id: UUID,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return prepare_delivery_notifications(
@@ -1773,7 +1778,7 @@ def prepare_request_delivery_notifications(
 
 @app.get(
     "/requests/{request_id}/delivery-appointment",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_delivery_appointment(request_id: UUID):
     try:
@@ -1793,7 +1798,7 @@ def retrieve_delivery_appointment(request_id: UUID):
 def propose_request_delivery_appointment(
     request_id: UUID,
     payload: DeliveryAppointmentProposalInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return propose_delivery_appointment(
@@ -1818,7 +1823,7 @@ def propose_request_delivery_appointment(
 def confirm_request_delivery_appointment(
     request_id: UUID,
     payload: DeliveryAppointmentConfirmationInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return confirm_delivery_appointment(
@@ -1840,7 +1845,7 @@ def confirm_request_delivery_appointment(
 
 @app.get(
     "/requests/{request_id}/delivery-status",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_delivery_status(request_id: UUID):
     try:
@@ -1860,7 +1865,7 @@ def retrieve_delivery_status(request_id: UUID):
 def schedule_request_delivery(
     request_id: UUID,
     payload: DeliveryStatusInitializeInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return initialize_delivery_status(
@@ -1884,7 +1889,7 @@ def schedule_request_delivery(
 def start_request_delivery(
     request_id: UUID,
     payload: DeliveryStatusStartInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return start_delivery(
@@ -1908,7 +1913,7 @@ def start_request_delivery(
 def complete_request_delivery(
     request_id: UUID,
     payload: DeliveryStatusCompleteInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return complete_delivery(
@@ -1930,7 +1935,7 @@ def complete_request_delivery(
 
 @app.get(
     "/requests/{request_id}/delivery-exceptions",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_delivery_exceptions(request_id: UUID):
     try:
@@ -1946,7 +1951,7 @@ def retrieve_delivery_exceptions(request_id: UUID):
 def record_request_delivery_exception(
     request_id: UUID,
     payload: DeliveryExceptionInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return record_delivery_exception(
@@ -1972,7 +1977,7 @@ def record_request_delivery_exception(
 
 @app.get(
     "/requests/{request_id}/human-interventions",
-    dependencies=[Depends(require_operator_permission("read"))],
+    dependencies=[Depends(require_request_permission("read"))],
 )
 def retrieve_human_interventions(request_id: UUID):
     try:
@@ -1988,7 +1993,7 @@ def retrieve_human_interventions(request_id: UUID):
 def create_request_human_intervention(
     request_id: UUID,
     payload: HumanInterventionCreateInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return create_human_intervention(
@@ -2013,7 +2018,7 @@ def create_request_human_intervention(
 def acknowledge_request_human_intervention(
     request_id: UUID,
     payload: HumanInterventionAcknowledgeInput,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     try:
         return acknowledge_human_intervention(
@@ -2037,7 +2042,7 @@ def acknowledge_request_human_intervention(
 def approve_request(
     request_id: UUID,
     decision: WorkflowDecision,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     request = get_request(request_id)
 
@@ -2073,7 +2078,7 @@ def approve_request(
 def reject_request(
     request_id: UUID,
     decision: WorkflowDecision,
-    operator: OperatorPrincipal = Depends(require_operator_permission("decide")),
+    operator: OperatorPrincipal = Depends(require_request_permission("decide")),
 ):
     request = get_request(request_id)
 
@@ -2116,7 +2121,7 @@ def reject_request(
 def run_request_tool(
     request_id: UUID,
     tool_name: str,
-    operator: OperatorPrincipal = Depends(require_operator_permission("tools")),
+    operator: OperatorPrincipal = Depends(require_request_permission("tools")),
 ):
     request = get_request(request_id)
 
