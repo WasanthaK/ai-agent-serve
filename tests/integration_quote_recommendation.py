@@ -39,6 +39,11 @@ from delivery_appointment import (
     get_delivery_appointment,
     propose_delivery_appointment,
 )
+from delivery_status import (
+    get_delivery_status,
+    initialize_delivery_status,
+    start_delivery,
+)
 
 
 def ready_analysis():
@@ -452,6 +457,75 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             self.assertFalse(
                 event["details"]["external_calendar_booking_created"]
             )
+            self.assertFalse(event["details"]["notification_sent"])
+
+        delivery_status = initialize_delivery_status(
+            request_id,
+            UUID(appointment["appointment_id"]),
+            reason="Human scheduled delivery after appointment confirmation.",
+            actor="operator:ci",
+        )
+        delivery_status_retry = initialize_delivery_status(
+            request_id,
+            UUID(appointment["appointment_id"]),
+            reason="Human scheduled delivery after appointment confirmation.",
+            actor="operator:ci",
+        )
+
+        self.assertEqual(
+            delivery_status_retry["delivery_status_id"],
+            delivery_status["delivery_status_id"],
+        )
+        self.assertEqual(delivery_status["status"], "scheduled")
+        self.assertFalse(delivery_status["completion_recorded"])
+        self.assertFalse(delivery_status["exception_recorded"])
+        self.assertFalse(delivery_status["notification_sent"])
+
+        started = start_delivery(
+            request_id,
+            UUID(delivery_status["delivery_status_id"]),
+            reason="Human confirmed service work has started.",
+            actor="operator:ci",
+        )
+        started_retry = start_delivery(
+            request_id,
+            UUID(delivery_status["delivery_status_id"]),
+            reason="Human confirmed service work has started.",
+            actor="operator:ci",
+        )
+
+        self.assertEqual(
+            started_retry["delivery_status_id"],
+            started["delivery_status_id"],
+        )
+        self.assertEqual(started["status"], "in_progress")
+        self.assertIsNotNone(started["started_at"])
+        self.assertFalse(started["completion_recorded"])
+        self.assertFalse(started["exception_recorded"])
+        self.assertFalse(started["notification_sent"])
+
+        persisted_status = get_delivery_status(request_id)
+        self.assertEqual(
+            persisted_status["delivery_status_id"],
+            delivery_status["delivery_status_id"],
+        )
+        self.assertEqual(persisted_status["status"], "in_progress")
+
+        status_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"].startswith("delivery_status_")
+        ]
+        self.assertEqual(
+            [event["event_type"] for event in status_events],
+            [
+                "delivery_status_scheduled",
+                "delivery_status_in_progress",
+            ],
+        )
+        for event in status_events:
+            self.assertFalse(event["details"]["completion_recorded"])
+            self.assertFalse(event["details"]["exception_recorded"])
             self.assertFalse(event["details"]["notification_sent"])
 
 
