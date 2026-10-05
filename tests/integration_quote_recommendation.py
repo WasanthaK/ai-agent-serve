@@ -48,6 +48,11 @@ from delivery_exception import (
     get_delivery_exceptions,
     record_delivery_exception,
 )
+from human_intervention import (
+    acknowledge_human_intervention,
+    create_human_intervention,
+    get_human_interventions,
+)
 
 
 def ready_analysis():
@@ -595,6 +600,90 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             self.assertFalse(
                 event["details"]["human_intervention_created"]
             )
+            self.assertFalse(event["details"]["notification_sent"])
+
+        intervention = create_human_intervention(
+            request_id,
+            issue_id,
+            priority="high",
+            reason="Operator intervention required for service issue.",
+            actor="operator:ci",
+        )
+        intervention_retry = create_human_intervention(
+            request_id,
+            issue_id,
+            priority="high",
+            reason="Operator intervention required for service issue.",
+            actor="operator:ci",
+        )
+
+        self.assertEqual(
+            intervention_retry["intervention_id"],
+            intervention["intervention_id"],
+        )
+        self.assertEqual(intervention["status"], "open")
+        self.assertEqual(intervention["priority"], "high")
+        self.assertFalse(intervention["exception_resolved"])
+        self.assertFalse(intervention["delivery_status_changed"])
+        self.assertFalse(intervention["notification_sent"])
+
+        exceptions_after_queue = get_delivery_exceptions(request_id)
+        issue_after_queue = next(
+            item
+            for item in exceptions_after_queue
+            if item["exception_id"] == str(issue_id)
+        )
+        self.assertTrue(issue_after_queue["human_intervention_created"])
+
+        acknowledged = acknowledge_human_intervention(
+            request_id,
+            UUID(intervention["intervention_id"]),
+            reason="Operator has taken ownership of the intervention.",
+            actor="operator:ci",
+        )
+        acknowledged_retry = acknowledge_human_intervention(
+            request_id,
+            UUID(intervention["intervention_id"]),
+            reason="Operator has taken ownership of the intervention.",
+            actor="operator:ci",
+        )
+
+        self.assertEqual(
+            acknowledged_retry["intervention_id"],
+            acknowledged["intervention_id"],
+        )
+        self.assertEqual(acknowledged["status"], "acknowledged")
+        self.assertIsNotNone(acknowledged["acknowledged_at"])
+        self.assertFalse(acknowledged["exception_resolved"])
+        self.assertFalse(acknowledged["delivery_status_changed"])
+        self.assertFalse(acknowledged["notification_sent"])
+
+        persisted_interventions = get_human_interventions(request_id)
+        self.assertEqual(len(persisted_interventions), 1)
+        self.assertEqual(
+            persisted_interventions[0]["intervention_id"],
+            intervention["intervention_id"],
+        )
+        self.assertEqual(
+            persisted_interventions[0]["status"],
+            "acknowledged",
+        )
+
+        intervention_events = [
+            event
+            for event in get_request_events(request_id)
+            if event["event_type"].startswith("human_intervention_")
+        ]
+        self.assertEqual(
+            [event["event_type"] for event in intervention_events],
+            [
+                "human_intervention_created",
+                "human_intervention_acknowledged",
+            ],
+        )
+        for event in intervention_events:
+            self.assertFalse(event["details"]["exception_resolved"])
+            self.assertFalse(event["details"]["delivery_status_changed"])
             self.assertFalse(event["details"]["notification_sent"])
 
 
