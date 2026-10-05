@@ -570,19 +570,36 @@ Completed failed-regression revision path:
 - revised candidates return to regression testing and may become promotion-ready
 - no revision applies instructions/policy, mutates the registry, changes skill versions, promotes skills, or changes production behavior
 
+Completed end-user Training / Skill Improvement console:
+
+- operator-facing Training console implemented and CI-verified in PR #68
+- real-case context, human evaluation, outcome evidence, proposals, revisions and regression evidence are visible in one workflow
+- only backend-authorized actions are exposed
+- operator API keys remain in page memory only and are not placed in URLs, cookies or browser storage
+- no business data or credentials are embedded in the public HTML shell
+- no-store/no-referrer/frame-denial and same-origin content-security controls protect the console boundary
+
 Current bounded work:
 
-- provide an end-user Training / Skill Improvement console over the existing protected training APIs
-- show real-case context, human evaluation, outcome evidence, proposal, latest revision and regression evidence
-- allow only backend-supported actions: create proposal, record regression evidence, create revision
-- keep promotion visibly unavailable until controlled promotion exists
-- require operators to provide an existing API key at runtime
-- keep credentials out of URLs, cookies and browser storage
-- do not embed business data or credentials in the public HTML shell
+- allow controlled human promotion only from passing latest regression evidence
+- preserve exact proposal/revision/regression provenance in the promotion record
+- deterministically promote the skill to the next minor semantic version
+- preserve the existing base instructions and append only the reviewed amendment
+- require current runtime version and instructions to exactly match the proposal base snapshot
+- activate the promoted version in the live registry only after durable promotion persistence
+- restore durable promotions into a fresh registry at runtime startup
+- build each analysis call from an atomic current skill-contract snapshot and persist the exact versions used
+- expose promotion only to operator `decide`
+- show a distinct promoted state in the Training console
+- keep promotion human-authorized and regression-gated; model output alone must never activate a change
 
-Planned next:
+Phase 7 completion condition:
 
-- Controlled skill promotion after passing regression evidence
+- controlled promotion passes unit/security/PostgreSQL integration proof and production packaging includes all Phase 7 runtime modules
+
+Planned next after Phase 7:
+
+- Phase 8 — Platform capabilities
 
 Production behaviour must never change solely because of unreviewed model output.
 
