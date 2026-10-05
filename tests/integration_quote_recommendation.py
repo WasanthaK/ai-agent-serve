@@ -153,6 +153,7 @@ class QuoteRecommendationIntegrationTests(unittest.TestCase):
             skill_versions={
                 "request_intake": "1.0.0",
                 "request_clarification": "1.0.0",
+                "safety_triage": "1.0.0",
             },
         )
         self.request_ids.append(request_id)
