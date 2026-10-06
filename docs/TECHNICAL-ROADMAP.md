@@ -715,6 +715,15 @@ The package must distinguish fact, authoritative platform fact, inference, assum
 
 ### Phase 8C — Commercial Proposal Package
 
+Phase 8C is complete.
+
+Completed evidence:
+
+- PR #78 — Commercial Proposal Package v1 contracts and policy validation
+- PR #79 — commercial proposal reasoning service with deterministic pricing-policy enforcement
+- PR #80 — stateless `/v1/expert/commercial-proposals` API surface
+
+
 Define the provider-side expert contract consumed by SendQuote/provider workflows.
 
 It may add provider-context work breakdown, commercial structure, duration,
