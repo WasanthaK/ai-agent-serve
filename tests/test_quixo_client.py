@@ -1,5 +1,6 @@
 import os
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 import httpx
@@ -283,7 +284,7 @@ class QuixoClientTests(unittest.TestCase):
         self.assertNotIn("secret-host-detail", str(raised.exception))
 
     def test_configuration_fails_closed(self):
-        with unittest.mock.patch.dict(
+        with patch.dict(
             os.environ,
             {
                 "QUIXO_QUOTE_BASE_URL": "",
