@@ -664,6 +664,15 @@ identity.
 
 ### Phase 8B — Conversational Requirement Intelligence
 
+Phase 8B is complete.
+
+Completed evidence:
+
+- PR #75 — `RequirementConversationTurn` and Requirement Intelligence Package v1 contracts
+- PR #76 — requirement-intelligence reasoning service with deterministic directive derivation
+- PR #77 — stateless `/v1/expert/requirements/turn` API surface and route-level validation
+
+
 Define the price-neutral customer/request-side expert contract **and** the channel-neutral conversation-turn contract used to build it progressively.
 
 The central interaction primitive is a `RequirementConversationTurn`, not a provider webhook. A turn carries normalized message/media/transcript references, caller/product surface, channel/thread correlation, optional canonical Quixo references, acting context and the previous expert package/provenance needed for continuation.
