@@ -43,6 +43,13 @@ from observability import (
     correlation_exception_handler,
 )
 from operational_metrics import operational_metrics
+from expert_contracts import ExpertRequirementTurnRequest
+from expert_requirement_service import (
+    PriorExpertStateError,
+    RequirementReasoningUnavailableError,
+    RequirementReasoningValidationError,
+    analyze_requirement_turn,
+)
 from provider_selection import (
     ProviderSelectionConflictError,
     ProviderSelectionEligibilityError,
@@ -635,6 +642,27 @@ def run_agent(request: AgentRequest):
         message=request.message,
         source="direct",
     )
+
+
+@app.post(
+    "/v1/expert/requirements/turn",
+    dependencies=[Depends(require_operator_permission("analyze"))],
+)
+def run_requirement_turn(request: ExpertRequirementTurnRequest):
+    """Run stateless requirement intelligence without mutating Quixo or sending."""
+
+    try:
+        return analyze_requirement_turn(
+            request.turn,
+            client=client,
+            prior_package=request.prior_requirement_package,
+        )
+    except PriorExpertStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except RequirementReasoningValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RequirementReasoningUnavailableError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.post("/webhook/quote-request")
