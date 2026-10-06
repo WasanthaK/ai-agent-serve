@@ -166,6 +166,7 @@ Rejected or otherwise incompatible requests cannot execute it.
 | `GET` | `/service-catalog` | Retrieve service groups and skill profiles |
 | `POST` | `/agent` | Direct structured analysis |
 | `POST` | `/v1/expert/requirements/turn` | Stateless conversational requirement intelligence |
+| `POST` | `/v1/expert/commercial-proposals` | Stateless provider-side commercial proposal intelligence |
 | `POST` | `/webhook/quote-request` | Create and analyse a request |
 | `GET` | `/requests/{request_id}` | Retrieve the current request |
 | `GET` | `/requests/{request_id}/messages` | Retrieve conversation history |
@@ -186,6 +187,15 @@ it is stateless: a continuation request supplies the exact prior package alongsi
 the turn. The route requires the existing operator `analyze` permission until the
 Phase 8D Quixo anti-corruption adapter introduces product-specific caller auth.
 It does not persist Quixo state or send messages.
+
+### Expert commercial proposal API
+
+`POST /v1/expert/commercial-proposals` accepts the versioned
+`CommercialProposalRequest` contract and returns a provider-reviewable Commercial
+Proposal Package. During Phase 8C it is stateless and protected by the existing
+operator `analyze` permission until Phase 8D introduces product-specific Quixo
+caller authentication. It does not create or mutate a SendQuote quotation,
+calculate authoritative totals/tax, approve a quote, or send a message.
 
 Interactive API documentation is available at:
 
