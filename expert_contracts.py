@@ -299,3 +299,12 @@ class RequirementConversationTurnResponse(BaseModel):
     requires_human_review: bool = False
     safety_escalated: bool = False
     provenance: ExpertProvenance
+
+
+class ExpertRequirementTurnRequest(BaseModel):
+    """Stateless API envelope for one requirement-intelligence turn."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    turn: RequirementConversationTurn
+    prior_requirement_package: Optional[RequirementIntelligencePackage] = None
