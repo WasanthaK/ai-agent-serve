@@ -315,6 +315,115 @@ The agent may persist only what it needs for:
 Agent-local message/request rows from the prototype must not become a competing
 business conversation source of truth.
 
+## Channel interaction model
+
+Channels share expert reasoning but intentionally use different interaction policies.
+
+| Channel | Primary interaction | Automatic clarification posture | Canonical outcome |
+|---|---|---|---|
+| Email | asynchronous, mostly inbound | optional bounded clarification after tenant/product opt-in | same requirement refined until pricing-ready or human review |
+| Web widget | synchronous guided conversation | interactive inside the active widget session | customer confirms structured requirement before submit |
+| WhatsApp | asynchronous conversational | first-class bounded interaction through Quixo Messaging | multiple turns remain bound to the same requirement |
+| Marketplace | interactive product UX | in-product interaction; external communication still product-authorized | refined RequestQuote demand and provider proposal context |
+| Future Messenger/social | conversational adapter | policy-controlled | same Requirement Conversation Turn contract |
+
+### Email
+
+Email should remain predominantly an intake channel, not become a chat UI.
+
+Target behavior:
+
+1. ingest and persist the inbound lead/thread in Quixo;
+2. ask the Expert Agent for a Requirement Intelligence Package;
+3. if sufficient, continue the normal RequestQuote/SendQuote flow;
+4. if materially incomplete, generate one concise batch of the highest-value clarification questions;
+5. if tenant/product policy explicitly enables automatic clarification, Quixo sends the draft through Messaging in the same email thread;
+6. replies continue the **same** requirement and are re-analysed;
+7. repeated uncertainty, safety/compliance concerns or policy limits route to human review.
+
+Automatic email clarification never sends a price, promises timing/availability, commits scope, accepts terms or issues a quotation.
+
+Email thread metadata such as provider message id, reply/reference identifiers and normalized conversation identity must survive the connector contract.
+
+### Web widget
+
+The widget is the preferred synchronous requirement-building surface.
+
+The Expert Agent should:
+
+- ask focused questions progressively rather than present a long form
+- continuously refine the Requirement Intelligence Package
+- show a concise structured summary back to the customer
+- make assumptions/unknowns visible
+- let the customer correct the interpretation
+- reach `ready_for_pricing`, `inspection_required`, `needs_human_review` or `safety_escalation`
+- let the owning Quixo product perform the actual request submission
+
+The agent does not create a second widget conversation store.
+
+### WhatsApp
+
+WhatsApp is a primary interactive asynchronous channel.
+
+```text
+WhatsApp/Meta
+ -> Quixo connector/Messaging
+ -> normalize + bind thread/customer/company
+ -> Expert Agent requirement turn
+ -> Requirement Intelligence Package + reply draft/directive
+ -> Quixo policy authorizes delivery
+ -> Quixo Messaging sends
+ -> customer reply returns to the same thread/request
+```
+
+Quixo Messaging remains authoritative for customer-service-window/template behavior.
+
+Text is the first production slice. Voice notes, images and documents are enriched through transcription/vision/document-processing adapters before expert reasoning; a media identifier by itself is never customer requirement text.
+
+### Marketplace
+
+Marketplace uses the Expert Agent on both sides of the sourcing flow.
+
+**Demand side:** interactively help the customer describe the job well enough for RequestQuote to source accurately.
+
+**Provider side:** help the provider understand the request, identify risk/unknowns and prepare a provider-reviewable proposal structure.
+
+Marketplace still feeds RequestQuote for the canonical sourcing/request flow. Expert assistance does not grant Marketplace or the agent quote-send, acceptance or award authority.
+
+### Future conversational channels
+
+Messenger and similar channels should be thin adapters over the same normalized Requirement Conversation Turn contract. They add provider authentication/normalization and delivery behavior, not duplicate expert reasoning.
+
+## Requirement Conversation Turn contract
+
+Minimum request fields:
+
+- schema version
+- caller/product surface
+- channel
+- external message id
+- external thread/conversation id where available
+- correlation/idempotency reference
+- participant role
+- provider company / buyer organization / public context as applicable
+- optional canonical ServiceRequest/Quotation references
+- normalized text
+- bounded media/transcript/document references
+- previous expert package/reference for continuation
+- locale/timezone/context hints when authoritative
+
+Minimum response fields:
+
+- Requirement Intelligence Package
+- interaction directive
+- clarification questions
+- optional channel-neutral reply draft
+- confidence/readiness
+- safety/human-review flags
+- model/skill/provenance identifiers
+
+The reply draft is content only. The owning Quixo product decides if, where and how it is delivered.
+
 ## Product/identity context
 
 One generic agent tenant identifier is not enough to represent every Quixo
@@ -467,47 +576,76 @@ Every cross-system contract must define:
 
 ## Immediate implementation sequence
 
-### A1 — Product-family contract inventory
+### A1 — Product-family + messaging contract inventory
 
-- freeze duplicate commercial ownership expansion
-- inventory current AI/extraction entry points in SendQuote, RequestQuote,
-  Marketplace and connectors
-- inventory existing Quixo APIs/events usable by the expert platform
-- classify current agent modules as keep/adapt/freeze
+Complete the current architecture/contract audit and lock the first interfaces.
+
+- inventory existing SendQuote/RequestQuote/Marketplace AI entry points
+- inventory Messaging send/status/WhatsApp-window capabilities
+- inventory connector thread/idempotency data
 - define explicit acting-context/identifier mapping
+- classify agent modules keep/adapt/freeze
+- define exact new endpoint ownership before implementation
 
-### A2 — Requirement Intelligence Package v1
+### A2 — Requirement Conversation Turn + Requirement Intelligence Package v1
 
-Define/test the price-neutral customer/request-side expert contract.
+Implement the Expert Agent's channel-neutral conversational contract.
 
-No product mutation.
+No Quixo mutation and no outbound send in this slice.
 
-### A3 — Commercial Proposal Package v1
+### A3 — Quixo conversation binding / expert context contracts
 
-Define/test the provider-side expert proposal contract with explicit estimate versus
-authoritative-price semantics.
+Add the minimum Quixo APIs/contracts needed to:
 
-No autonomous send/approval.
+- continue the same requirement across inbound replies
+- project authorised request/context data to the Expert Agent
+- attach expert evidence/readiness back to the request
+- expose pre-quote direct/public request conversation where required
 
-### A4 — Quixo integration adapter
+### A4 — Web widget conversational proof
 
-Create an anti-corruption `quixo_client` boundary rather than product-specific
-database coupling.
+Use the existing widget as the first synchronous production-style proof:
 
-Initial consumers can be migrated one bounded path at a time.
+- progressive expert clarification
+- structured summary
+- customer correction/confirmation
+- final RequestQuote submission through existing Quixo authority
 
-### A5 — Canonical reference/provenance linking
+### A5 — WhatsApp interactive proof
 
-Persist only stable external references needed for reproducibility and learning.
+Use existing Quixo Meta/WhatsApp ingress + Messaging delivery:
 
-### A6 — Outcome feedback contract
+- text conversation first
+- stable request/thread binding
+- expert clarification turns
+- bounded automatic replies through Quixo policy
+- then voice-note transcription as the next media slice
 
-Consume factual corrections and outcomes from the owning Quixo product.
+### A6 — Email asynchronous clarification proof
 
-### A7 — Context intelligence
+Keep email mostly inbound.
 
-First proof: one outdoor-work domain skill with weather/environmental evidence,
-recommendation-only until deterministic policy thresholds are defined.
+- expert analyse incoming email
+- if incomplete, draft one concise clarification batch
+- tenant opt-in required for auto-send
+- preserve same email/request thread on reply
+- stop at pricing-ready/human-review; never auto-quote
+
+### A7 — Marketplace interactive requirement refinement
+
+Give Marketplace direct expert interaction while preserving Marketplace -> RequestQuote ownership.
+
+### A8 — Commercial Proposal Package v1 / SendQuote delegation
+
+Move provider-side requirement-to-quote intelligence behind the shared expert contract using shadow/compare migration from the existing embedded AI.
+
+### A9 — Outcome feedback and controlled learning integration
+
+Feed provider corrections and factual downstream product outcomes into the existing regression-gated skill learning loop.
+
+### A10 — Context intelligence
+
+First proof: an outdoor-work skill using weather/environmental evidence. Recommendation-only until deterministic product policies are defined.
 
 ## Explicit non-goals
 
