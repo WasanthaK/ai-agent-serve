@@ -165,6 +165,7 @@ Rejected or otherwise incompatible requests cannot execute it.
 | `GET` | `/` | Health and version |
 | `GET` | `/service-catalog` | Retrieve service groups and skill profiles |
 | `POST` | `/agent` | Direct structured analysis |
+| `POST` | `/v1/expert/requirements/turn` | Stateless conversational requirement intelligence |
 | `POST` | `/webhook/quote-request` | Create and analyse a request |
 | `GET` | `/requests/{request_id}` | Retrieve the current request |
 | `GET` | `/requests/{request_id}/messages` | Retrieve conversation history |
@@ -174,6 +175,17 @@ Rejected or otherwise incompatible requests cannot execute it.
 | `POST` | `/requests/{request_id}/approve` | Approve a reviewed request |
 | `POST` | `/requests/{request_id}/reject` | Reject an active request |
 | `POST` | `/requests/{request_id}/tools/{tool_name}` | Execute an allowed tool |
+
+
+### Expert requirement API
+
+`POST /v1/expert/requirements/turn` accepts the versioned
+`RequirementConversationTurn` contract and returns a price-neutral Requirement
+Intelligence Package plus a deterministic interaction directive. During Phase 8B
+it is stateless: a continuation request supplies the exact prior package alongside
+the turn. The route requires the existing operator `analyze` permission until the
+Phase 8D Quixo anti-corruption adapter introduces product-specific caller auth.
+It does not persist Quixo state or send messages.
 
 Interactive API documentation is available at:
 
