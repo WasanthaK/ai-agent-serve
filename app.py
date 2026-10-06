@@ -43,6 +43,12 @@ from observability import (
     correlation_exception_handler,
 )
 from operational_metrics import operational_metrics
+from commercial_contracts import CommercialProposalRequest
+from expert_commercial_service import (
+    CommercialProposalUnavailableError,
+    CommercialProposalValidationError,
+    analyze_commercial_proposal,
+)
 from expert_contracts import ExpertRequirementTurnRequest
 from expert_requirement_service import (
     PriorExpertStateError,
@@ -662,6 +668,24 @@ def run_requirement_turn(request: ExpertRequirementTurnRequest):
     except RequirementReasoningValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RequirementReasoningUnavailableError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post(
+    "/v1/expert/commercial-proposals",
+    dependencies=[Depends(require_operator_permission("analyze"))],
+)
+def run_commercial_proposal(request: CommercialProposalRequest):
+    """Run stateless provider-side proposal intelligence without mutating SendQuote."""
+
+    try:
+        return analyze_commercial_proposal(
+            request,
+            client=client,
+        )
+    except CommercialProposalValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except CommercialProposalUnavailableError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
