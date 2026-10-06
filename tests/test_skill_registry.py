@@ -9,9 +9,10 @@ class SkillRegistryTests(unittest.TestCase):
     def test_built_in_skills_are_registered_without_changing_default_analysis(self):
         self.assertEqual(
             skill_registry.names(),
-            DEFAULT_ANALYSIS_SKILLS + ("provider_routing",),
+            DEFAULT_ANALYSIS_SKILLS + ("provider_routing", "requirement_intelligence"),
         )
         self.assertNotIn("provider_routing", DEFAULT_ANALYSIS_SKILLS)
+        self.assertNotIn("requirement_intelligence", DEFAULT_ANALYSIS_SKILLS)
 
     def test_analysis_schema_is_strict_and_complete(self):
         schema = skill_registry.build_json_schema(
@@ -35,6 +36,13 @@ class SkillRegistryTests(unittest.TestCase):
         self.assertEqual(len(schema["properties"]["category"]["enum"]), 47)
         self.assertIn("plumbing", schema["properties"]["category"]["enum"])
         self.assertNotIn("home-services", schema["properties"]["category"]["enum"])
+
+    def test_requirement_intelligence_is_separate_from_legacy_analysis(self):
+        skill = skill_registry.get("requirement_intelligence")
+
+        self.assertEqual(skill.version, "1.0.0")
+        self.assertEqual(skill.permitted_tools, frozenset())
+        self.assertIn("never invent provider pricing", skill.instructions)
 
     def test_routing_skill_cannot_rank_select_or_mutate_providers(self):
         skill = skill_registry.get("provider_routing")
