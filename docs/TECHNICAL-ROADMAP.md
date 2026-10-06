@@ -2,10 +2,25 @@
 
 ## Product direction
 
-The project is evolving into a controlled agent platform for service-delivery request management.
+The project is evolving into an independent **Expert Agent Platform** shared by the Quixo product family.
 
-The platform should help service organisations capture requests from multiple channels, collect missing information, identify risk, route work, prepare and evaluate quotations, coordinate delivery and preserve a complete operational history.
+### North star
 
+Build continuously learning domain-expert agents that understand real-world service requirements and operating conditions, identify uncertainty and risk, and transform that evidence into safe, predictable, commercially actionable work scopes and proposals.
+
+The Expert Agent Platform owns expertise, reasoning, clarification, contextual intelligence, provenance and controlled learning.
+
+Quixo products retain their own transactional authority:
+- **SendQuote** — provider quotation workflow
+- **RequestQuote** — public/governed demand and RFQ workflow
+- **Marketplace** — sourcing/matching feeding RequestQuote and consuming expert intelligence
+- **Connectors/shared services** — widget, email, WhatsApp, voice, Messaging, Identity and other established platform capabilities
+
+Future **Task Scheduler / Workforce / Service Delivery** is a separate product/project, not an agent submodule.
+
+Products and the Expert Agent remain separate so each can evolve, deploy and roll back independently behind versioned contracts.
+
+Canonical target architecture: `docs/AGENT-QUOTES-BOUNDARY.md`.
 
 ## Design principles
 
@@ -16,8 +31,8 @@ Every phase should preserve these principles:
 - Human approval is required for consequential or high-risk actions.
 - Skills are explicit, versioned and testable.
 - Tools are registered, state-aware and auditable.
-- Customer messages are stored before downstream AI processing.
-- Failures must not lose business events.
+- Canonical business messages remain owned by Quixo Messaging/product connectors; agent persistence is analysis/provenance evidence, not a competing conversation ledger.
+- Failures must not lose agent evidence or corrupt the owning product's business events.
 - External actions require authentication, authorization and an audit trail.
 - The Mac Mini remains a lightweight orchestration node.
 
@@ -139,11 +154,14 @@ Completed slices:
 - website normalized inbound persistence before AI, durable request linkage and completed-retry backfill implemented and CI-verified in PR #27
 - validated website `Idempotency-Key` values are represented only by SHA-256 hashes in durable inbound-message identity; raw keys are not stored there
 
-External enablement remains deliberately separate from software completion:
+External enablement remains deliberately separate from software completion.
 
-- live SendGrid DNS/MX/public webhook enablement remains deferred
-- live Twilio/Quixo WhatsApp end-to-end proof remains deferred
-- no DNS, MX, public endpoint, Twilio sender/webhook, Azure messaging, firewall, tunnel or port-forwarding changes without explicit authorization immediately before the action
+**Architecture re-baseline:** do not finish the deferred direct SendGrid/Twilio production enablement inside `ai-agent-serve`. The existing Phase 4D ingress code remains useful normalization/idempotency evidence, but production channel interaction now integrates through the established Quixo connector/Messaging stack in Phase 8.
+
+- Quixo remains the public email/WhatsApp/widget/marketplace channel boundary
+- the Expert Agent receives normalized interaction turns through versioned internal contracts
+- outbound delivery goes through Quixo Messaging/product authorization, never directly from the agent to SendGrid/Twilio/Meta
+- no DNS, MX, public endpoint, provider webhook, Azure messaging, firewall, tunnel or port-forwarding changes without explicit authorization immediately before the action
 
 Initial adapters:
 
@@ -159,6 +177,17 @@ Later adapters:
 - Social channels
 
 Channel adapters should translate messages into the common request format. They must not contain service-delivery reasoning themselves.
+
+## Architecture supersession notice — Phases 5–7
+
+**The implementation history below remains valid evidence of work completed, but its
+transactional ownership model is superseded by the product-family architecture in
+`docs/AGENT-QUOTES-BOUNDARY.md`.**
+
+Do not extend the local provider directory, RFQ, quote/award, delivery, closure or
+messaging modules as new production systems of record. Treat them as prototype,
+behavioural, safety and learning evidence until replaced by versioned integration
+contracts with the owning Quixo product.
 
 ## Phase 5 — Provider routing and quotations
 
@@ -579,19 +608,19 @@ Completed end-user Training / Skill Improvement console:
 - no business data or credentials are embedded in the public HTML shell
 - no-store/no-referrer/frame-denial and same-origin content-security controls protect the console boundary
 
-Current bounded work:
+Completed controlled skill promotion:
 
-- allow controlled human promotion only from passing latest regression evidence
-- preserve exact proposal/revision/regression provenance in the promotion record
-- deterministically promote the skill to the next minor semantic version
-- preserve the existing base instructions and append only the reviewed amendment
-- require current runtime version and instructions to exactly match the proposal base snapshot
-- activate the promoted version in the live registry only after durable promotion persistence
-- restore durable promotions into a fresh registry at runtime startup
-- build each analysis call from an atomic current skill-contract snapshot and persist the exact versions used
-- expose promotion only to operator `decide`
-- show a distinct promoted state in the Training console
-- keep promotion human-authorized and regression-gated; model output alone must never activate a change
+- human promotion is allowed only from passing latest regression evidence
+- proposal/revision/regression provenance is persisted in the promotion record
+- skills promote deterministically to the next minor semantic version
+- base instructions are preserved and only the reviewed amendment is appended
+- runtime version/instruction drift fails closed
+- durable promotion is persisted before live-registry activation
+- promotions are restored at runtime startup
+- each analysis call snapshots the exact current skill contract/version set
+- promotion requires operator `decide`
+- the Training console exposes a distinct promoted state
+- unreviewed model output cannot activate a production change
 
 Phase 7 completion condition:
 
@@ -603,75 +632,211 @@ Planned next after Phase 7:
 
 Production behaviour must never change solely because of unreviewed model output.
 
-## Phase 8 — Platform capabilities
+## Phase 8 — Expert platform and Quixo product-family integration
 
-### Phase 8A — Multi-tenant isolation
+### Phase 8A — Agent access boundary
 
-Completed tenant identity foundation:
+Completed:
 
-- durable tenant identity and lifecycle implemented and CI-verified in PR #70
-- canonical tenant keys and explicit pending/active/suspended/closed states
-- append-only tenant lifecycle audit events
-- PostgreSQL create/read/status-transition proof
-- identity foundation does not itself claim tenant isolation
+- tenant identity foundation — PR #70
+- tenant-bound authentication context — PR #71
+- tenant-owned request ingress isolation — PR #72
+- downstream request-route isolation — PR #73
 
-Completed tenant-bound authentication context:
+These controls protect the agent platform itself. They must not become a second
+Quixo business-tenancy model.
 
-- optional canonical tenant binding for operator and inbound-channel credentials implemented and CI-verified in PR #71
-- authenticated tenant identity is carried in the request context
-- malformed tenant keys fail closed
-- legacy unbound credentials remain supported during migration
+The next integration contract must map explicit acting context rather than assuming
+one generic tenant id represents provider company, buyer organization and acting
+identity.
 
-Completed tenant-owned request ingress isolation:
+### Architecture correction — effective immediately
 
-- durable tenant ownership for agent_requests, inbound_messages and website idempotency reservations implemented and CI-verified in PR #72
-- tenant-bound website and trusted WhatsApp request creation/replay/read/reply paths fail closed
-- legacy unbound identities remain limited to legacy unowned rows
-- inbound linkage and external-message/idempotency identities are tenant-scoped
-- SendGrid remains explicitly legacy/unowned until it has a tenant-binding authority model
+- freeze new authoritative provider/RFQ/quote/award/delivery/messaging domain expansion in `ai-agent-serve`
+- retain Phases 5–7 as prototype/reference and behavioural evidence
+- keep SendQuote, RequestQuote and Marketplace as independently authoritative products
+- keep Marketplace -> RequestQuote as the sourcing/request relationship
+- make Marketplace, RequestQuote and SendQuote first-class Expert Agent consumers
+- keep existing Messaging authoritative for communication
+- support agent invocation both before and after a canonical ServiceRequest/Quotation exists
+- use versioned API/event contracts only; no cross-database access or shared ORM entities
+- keep future Task Scheduler/Workforce as a separate product/project
 
-Current bounded work:
+### Phase 8B — Conversational Requirement Intelligence
 
-- enforce one deterministic tenant ownership guard before every externally reachable request-owned operator route
-- preserve existing provider/RFQ/quote/delivery/closure/training business-state rules behind that guard
-- hide cross-tenant request existence with 404
-- fail closed when a bound tenant is missing or inactive
-- tenant-filter Training workspace list/detail reads through the joined request owner
-- keep non-request global metrics access on the existing permission-only boundary
+Define the price-neutral customer/request-side expert contract **and** the channel-neutral conversation-turn contract used to build it progressively.
 
-Planned next:
+The central interaction primitive is a `RequirementConversationTurn`, not a provider webhook. A turn carries normalized message/media/transcript references, caller/product surface, channel/thread correlation, optional canonical Quixo references, acting context and the previous expert package/provenance needed for continuation.
 
-- bind provider directory and provider eligibility data to tenant ownership inside the existing Quotes application workflow
-- preserve the canonical request -> provider selection -> RFQ -> quote -> award -> delivery lifecycle; do not create a parallel provider/quote subsystem
-- ensure provider eligibility, RFQ handoff and quote records continue to resolve through the same request identity used by the main Quotes app
-- prove provider selection cannot cross tenant boundaries
-- remove remaining internal unscoped request assumptions where they could become externally reachable
-- complete Phase 8A only after provider and downstream tenant isolation proofs are green
+The resulting `Requirement Intelligence Package` must represent:
 
-Remaining Phase 8 capabilities:
+- facts/customer objective
+- domain/subdomain
+- interpreted scope/work packages
+- materials/equipment and labour concepts
+- explicitly known quantities
+- missing information and clarification questions
+- assumptions/exclusions
+- safety/compliance
+- inspection requirement
+- environmental/context constraints
+- dependencies
+- readiness to request provider pricing
+- confidence/evidence provenance
 
-- Tenant-specific policies and skills
-- Role-based access control
-- Usage accounting
-- Regional data and retention controls
-- Public integration API
+The Expert Agent response also carries a deterministic interaction directive such as:
+
+- `ask_clarification`
+- `ready_for_pricing`
+- `needs_human_review`
+- `inspection_required`
+- `safety_escalation`
+
+and may include a **draft clarification message**. A draft grants no send authority.
+
+Channel policy:
+
+- **Email** — asynchronous and mostly inbound; after explicit tenant/product opt-in, low-risk clarification questions may be auto-sent through Quixo Messaging before quoting. No autonomous price, availability, scope commitment or quote send.
+- **Web widget** — synchronous guided conversation; clarify interactively, show the structured requirement back to the customer, and submit only after confirmation.
+- **WhatsApp** — first-class conversational channel; preserve one thread/request across multiple turns and support text first, then voice/image/document enrichment. Delivery remains through Quixo Messaging and its service-window/template rules.
+- **Marketplace** — interactive customer-side requirement refinement before/within RequestQuote plus provider-side expert assistance for understanding fit and preparing a proposal. Marketplace does not gain quote/award authority from the agent.
+- **Future Messenger/social channels** — reuse the same conversation-turn contract rather than adding channel-specific reasoning.
+
+The package must distinguish fact, authoritative platform fact, inference, assumption, estimate and unknown. It must not invent provider commercial prices.
+
+### Phase 8C — Commercial Proposal Package
+
+Define the provider-side expert contract consumed by SendQuote/provider workflows.
+
+It may add provider-context work breakdown, commercial structure, duration,
+assumptions/exclusions and clearly-labelled pricing suggestions/estimates where
+policy permits.
+
+Final prices, taxes, totals, approval and send remain authoritative in SendQuote and
+the permitted human/provider workflow.
+
+### Phase 8D — Quixo anti-corruption adapter
+
+Build one explicit `quixo_client` boundary.
+
+Rules:
+
+- versioned HTTP/event contracts
+- no direct database access
+- no dependency on Quixo table layout
+- explicit caller/product surface and acting authority context
+- deterministic idempotency/correlation
+- bounded retry/timeout behavior
+- graceful/manual fallback where appropriate
+- contract tests on both sides
+
+Migrate one embedded AI capability at a time using shadow/compare evidence rather
+than a big-bang replacement.
+
+### Phase 8E — Channel interaction and Quixo Messaging integration
+
+Replace the unfinished agent-side channel-delivery backlog with product-owned conversational integration.
+
+Rules:
+
+- Quixo connectors/Messaging authenticate channel providers, receive raw events and own delivery
+- the agent never stores a competing business conversation ledger
+- the agent never turns a raw email address/phone number into send authority
+- the agent returns analysis plus a draft response/interaction directive
+- the owning Quixo product resolves the canonical participant/destination and decides whether policy authorizes automatic delivery
+- every automated clarification is auditable, correlated and idempotent
+- commercial commitments remain behind the owning product's existing authority/human controls
+
+Required Quixo-side contract work:
+
+1. **Requirement conversation/thread binding** — bind email/WhatsApp/widget/marketplace turns to the same draft/canonical ServiceRequest so replies refine the existing requirement instead of creating duplicate leads.
+2. **Public/direct pre-quote conversation** — provide a request-level conversation/clarification surface before a Quotation exists. Existing public conversation is quote-linked; governed buyer clarification already exists separately.
+3. **Expert context projection** — expose only the authorised ServiceRequest/product context the agent needs; do not let the agent query Quixo databases.
+4. **Expert evidence attachment** — accept a versioned Requirement Intelligence Package/provenance/readiness assessment without allowing the agent to set commercial/routing authority directly.
+5. **Product-authorized clarification send** — reuse the existing Messaging clients; add only the orchestration/authorization contract needed for Quixo to send an agent-drafted clarification.
+6. **Inbound reply continuation** — preserve email thread identifiers and WhatsApp/customer conversation correlation and feed replies back through the same expert interaction.
+7. **Readiness gate** — keep the lead visible while incomplete, but do not treat it as provider-pricing-ready until deterministic product policy accepts the expert readiness evidence.
+
+Initial migration backlog from current Quixo code:
+
+- replace WhatsApp category/location extraction stubs with Expert Agent intelligence
+- transcribe WhatsApp voice notes before expert interpretation instead of treating the media id as message text
+- progressively replace regex/embedded email interpretation with the same expert contract
+- integrate widget conversational refinement with the same package
+- add Marketplace interactive requirement refinement
+- retain current Messaging email/SMS/WhatsApp send/status/window/template capabilities; do not duplicate them in the agent
+
+### Phase 8F — Canonical reference/provenance linking
+
+Agent evidence may reference authoritative Quixo identifiers without owning their
+state.
+
+Examples include ServiceRequest, Quotation and other owning-product identifiers
+where applicable.
+
+### Phase 8G — Outcome feedback into learning
+
+Consume factual corrections and outcomes from the owning product.
+
+Priority evidence:
+
+- provider corrections to scope
+- clarification deltas
+- quote revisions
+- acceptance/award outcome
+- execution/outcome evidence where a product exposes it
+- customer/provider feedback where permitted
+
+No outcome automatically promotes a skill.
+
+### Phase 8H — Context intelligence
+
+Add pluggable external context providers selected by domain skill.
+
+Examples:
+
+- severe weather
+- rain/wind/gusts
+- temperature/humidity
+- UV/heat
+- flood/fire
+- tides/daylight
+- traffic/access
+- air quality
+- seasonal conditions
+- future site sensors
+
+Context changes recommendations/risk evidence only. Deterministic policy decides
+whether it is informational, clarification-required, review-required,
+rescheduling-recommended or safety-escalated.
+
+Initial proof: one outdoor-work expert skill using weather/environmental context.
+
+### Remaining platform capabilities
+
+- domain/tenant-specific skill overlays
+- role-based expert access
+- usage accounting
+- regional retention/privacy controls
+- public integration API
 - MCP integration
-- Private deployment options
-- Optional local GPU inference
+- private deployment
+- optional local GPU inference
 
-## Initial skill catalogue
+## Target expert capability catalogue
 
-| Skill | Responsibility | Likely tools |
-|---|---|---|
-| Request intake | Classify intent, category and urgency | Request storage |
-| Request clarification | Identify essential missing information | Follow-up preparation |
-| Safety triage | Detect hazards and enforce escalation | Human-review queue |
-| Customer communication | Produce channel-appropriate messages | Email, WhatsApp, SMS |
-| Provider routing | Identify and explain suitable approved provider candidates | Provider directory |
-| Quote preparation | Create a normalized RFQ | Quotation service |
-| Quote evaluation | Compare provider responses | Evaluation records |
-| Delivery coordination | Manage appointments and exceptions | Calendar, messaging |
-| Service closure | Confirm outcome and request feedback | Review and survey tools |
+| Capability | Expert Agent responsibility |
+|---|---|
+| Requirement understanding | Interpret messy customer/provider intent and domain context |
+| Domain expert scoping | Build professional, domain-specific work scope and work packages |
+| Clarification intelligence | Ask the smallest/highest-value questions needed to reduce uncertainty |
+| Safety & compliance intelligence | Detect hazards, constraints and review/escalation needs |
+| Inspection intelligence | Decide when remote understanding is insufficient for reliable commercialisation |
+| Context intelligence | Interpret weather/environment/site factors relevant to the domain |
+| Commercial readiness | Assess whether evidence is sufficient to request pricing or prepare a provider proposal |
+| Proposal structuring | Produce provider-reviewable commercial structure without taking transactional authority |
+| Quote intelligence | Explain/compare factual proposal evidence without selecting or awarding |
+| Outcome learning | Learn from human/provider corrections and factual downstream outcomes |
 
 ## Definition of done for every capability
 
